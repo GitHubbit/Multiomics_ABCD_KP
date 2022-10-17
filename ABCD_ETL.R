@@ -14,8 +14,8 @@ unique(abcd_sub$eventname)
 abcd_baseline <- abcd3[abcd3$eventname %like% "baseline", ]
 
 # get a subset of data easier to work with (get only baseline readings)
-abcd_sub <- abcd_baseline[1:2000,]
-rm(abcd3, abcd_baseline) # remove big data, work with subset
+abcd_sub <- abcd_baseline[1:40,]
+rm(abcd3) # remove big data, work with subset
 
 # retrieve data dictionary so we know what we're looking at 
 dict_files <- list.files(path="/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCDstudyDEAP_2.0/dictionary", pattern=".csv", full.names=T)
@@ -138,20 +138,28 @@ selected_cols <- rbind(selected_cols, medsy01)
 
 additional_desired_cols <- c("subjectid", "src_subject_id", "eventname")
 # split Alias column on comma
-# aliases <- data.table::fread(text = paste0(selected_cols$Aliases, collapse = "\n"), data.table = FALSE, fill=TRUE)
-# aliases <- data.frame(do.call('rbind', strsplit(as.character(selected_cols$Aliases),',',fixed=TRUE)))
-# aliases <- separate_rows(data=selected_cols, Aliases, sep=",")
-# aliases$Aliases
-# View(data.frame(str_split(selected_cols$Aliases, ",", simplify=TRUE)))
+
 aliases <- data.frame(str_split(selected_cols$Aliases, ",", simplify=TRUE))
 aliases
 
 selected_cols_names_only <- c(additional_desired_cols, selected_cols$ElementName, selected_cols$Notes, selected_cols$Condition, selected_cols$Aliases, aliases$X1, aliases$X2)
 selected_cols_names_only <- unique(selected_cols_names_only[selected_cols_names_only != ""])
 
-initial_kg_cols <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
+# grab cols from NDA Aliases
+deap_aliases_updated <- read.csv(file = '/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/DEAP.aliases.updated.2.0.1.csv')
 
-# missing_cols <- data.frame(selected_cols_names_only[which(!selected_cols_names_only %in% names(abcd_sub))])
+
+# find cols in RDS dataframe that are also in desired cols of dictionary
+initial_kg <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
+missing_cols <- data.frame(selected_cols_names_only[which(!selected_cols_names_only %in% names(abcd_sub))])
+colnames(missing_cols)[1] ="cols_missing"
+
+missing_cols_found_in_deap <- data.frame(missing_cols$cols_missing[(missing_cols$cols_missing %in% deap_aliases_updated$nda)])
+colnames(missing_cols_found_in_deap)[1] ="deap_missing_cols"
+
+test <- data.frame(names(initial_kg))
+test <- setdiff(missing_cols_found_in_deap$deap_missing_cols, )
+
 # cols_of_abcd <- data.frame(names(abcd_sub))
 # cols_of_abcd2 <- data.frame(abcd_sub$eventname)
 # cols_of_abcd3 <- data.frame(abcd_sub$event_name)
@@ -163,6 +171,15 @@ initial_kg_cols <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
 # initial_kg_cols_2 <- abcd_sub[,abcd_sub %in% selected_cols_names_only)]
 
 # initial_kg_cols <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
+
+initial_kg[is.na(initial_kg)] <- 0
+
+factor_cols <- names(Filter(is.factor, initial_kg))
+factor_cols
+
+REPLACE ALL NA WITH 0 (FIND WHICH ARE NUMERICAL COLUMNS AND WHICH ARE FACTOR)
+ADD COLS TO FIND FROM NDA ALIAS FILE
+
 
 View(data.frame(selected_cols_names_only))
 View(data.frame(names(initial_kg_cols)))
