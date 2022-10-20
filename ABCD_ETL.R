@@ -14,8 +14,8 @@ unique(abcd_sub$eventname)
 abcd_baseline <- abcd3[abcd3$eventname %like% "baseline", ]
 
 # get a subset of data easier to work with (get only baseline readings)
-abcd_sub <- abcd_baseline[1:40,]
-rm(abcd3) # remove big data, work with subset
+abcd_sub <- abcd_baseline[1:2000,]
+rm(abcd3, abcd_baseline) # remove big data, work with subset
 
 # retrieve data dictionary so we know what we're looking at 
 dict_files <- list.files(path="/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCDstudyDEAP_2.0/dictionary", pattern=".csv", full.names=T)
@@ -36,46 +36,6 @@ abcd_dict <- rbindlist(abcd_dict, fill=T)
 
 types_in_df <- data.frame(sapply(abcd_sub, class))  # get the types of all the columns in the abcd dataset
 # grab columns of relevance 
-# abcd_sub <- abcd_sub[,sapply(abcd_sub,is.float) | sapply(abcd_sub,is.integer)]
-# selected_cols <-  abcd_dict %>% filter(DataType == "Float" |
-#                                            # DataType == "GUID" |
-#             
-#                                            # ElementName == "interview_age" |
-#                                            # ElementName == "sex" |
-#                                            ElementName == "anthroheightcalc" |
-#                                            ElementName == "anthroweightcalc" |
-#                                            # grepl("_t$", ElementName) |  # there's a lot of ElementNames that end in _t that aren't t_scores and I only want t_scores
-#                                            grepl("t-score", ElementDescription) |
-#                                            grepl("T-Score", ElementDescription) |
-#                                            grepl("T-score", ElementDescription) |
-#                                            grepl("Mean", ElementDescription) |
-#                                            grepl("mean", ElementDescription) |
-#                                            ElementDescription %like% "how much" |
-#                                            ElementDescription %like% "How much" |
-#                                            ElementDescription %like% "how many" |
-#                                            ElementDescription %like% "How many" |
-#                                            ElementDescription %like% "how long" |
-#                                            ElementDescription %like% "How long" |
-#                                            table_name == "abcd_otbi01" & grepl("age", ElementDescription) |
-#                                            table_name == "abcd_otbi01" & grepl("old", ElementDescription) |
-#                                            table_name == "abcd_otbi01" & grepl("old", ElementDescription) |
-#                                            table_name == "abcd_ps01" & DataType=="Integer" |
-#                                            table_name == "abcd_saiq02" & grepl("how many years", ElementDescription) |
-#                                            table_name == "abcd_tbi01" & grepl("SUM", ElementDescription) |
-#                                            # table_name == "abcd_tbss01" & grepl("agecorrected", ElementName)  # they computed T-scores later
-#                                            table_name == "abcd_y10ids01" & grepl("How many times", ElementDescription) |
-#                                            table_name == "abcd_yhr01" & grepl("ng/10 mg hair", ElementDescription) |
-#                                          table_name == "stq01" & grepl("ng/10 mg hair", ElementDescription) 
-#                                        
-#                                            # table_name == "abcd_yrb01" & grepl("how many", ElementDescription) |
-#                                            # table_name == "abcd_ysr01" & grepl("how many", ElementDescription) 
-#                                          
-#                                            
-# 
-#                                            )
-
-
-
 selected_cols <-  abcd_dict %>% filter(DataType == "Float" |
                                          ElementName == "anthroheightcalc|anthroweightcalc" |
                                          # grepl("_t$", ElementName) |  # there's a lot of ElementNames that end in _t that aren't t_scores and I only want t_scores
@@ -94,31 +54,13 @@ selected_cols <-  abcd_dict %>% filter(DataType == "Float" |
                                        # table_name == "abcd_ysr01" & grepl("how many", ElementDescription) 
                                        )
 
-
+# filter out MRI and other variables that are not float/numerical
 selected_cols <- selected_cols %>% filter(!grepl("mri|ehi_y_ss_scoreb|rep1|rep2|rep3|hair_results_lan|hair_results_entityid|hair_results_clientcode|hair_results_section_begin|hair_results_section_end|_nt$|_nm$", ElementName))
 selected_cols <- selected_cols %>% filter(!grepl("mri|pps01|macv01|freesqc01|abcd_ypsq101|medsy01|pmq01", table_name))
 selected_cols <- selected_cols %>% filter(!grepl("mri", Aliases))
 selected_cols <- selected_cols %>% filter(!grepl(";", ValueRange))
 selected_cols <- selected_cols %>% filter(!grepl("Raw Score|Missing Answers|Total Questions", ElementDescription))
-# selected_cols <- selected_cols %>% filter(!grepl("Missing Answers", ElementDescription))
-# selected_cols <- selected_cols %>% filter(!grepl("Total Questions", ElementDescription))
-# selected_cols <- selected_cols %>% filter(!grepl("ehi_y_ss_scoreb", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("rep1", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("rep2", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("rep3", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("pps01", table_name))
-# selected_cols <- selected_cols %>% filter(!grepl("macv01", table_name))
-# selected_cols <- selected_cols %>% filter(!grepl("freesqc01", table_name))
-# selected_cols <- selected_cols %>% filter(!grepl("abcd_ypsq101", table_name))
-# selected_cols <- selected_cols %>% filter(!grepl("medsy01", table_name)) # although this has float data, it depends on medication name, which requires extra handling....will have to encode by medicaton name (RxNorm given) and then make factors of it/column names m
-# selected_cols <- selected_cols %>% filter(!grepl("hair_results_lan", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("hair_results_entityid", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("hair_results_clientcode", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("hair_results_section_begin", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("hair_results_section_end", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("_nt$", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("_nm$", ElementName))
-# selected_cols <- selected_cols %>% filter(!grepl("pmq01", table_name))
+
 
 # tack dhx01 back on 
 dhx01 <-  abcd_dict %>% filter(table_name == "dhx01" &
@@ -145,14 +87,38 @@ aliases
 selected_cols_names_only <- c(additional_desired_cols, selected_cols$ElementName, selected_cols$Notes, selected_cols$Condition, selected_cols$Aliases, aliases$X1, aliases$X2)
 selected_cols_names_only <- unique(selected_cols_names_only[selected_cols_names_only != ""])
 
+initial_kg <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
+
+# initial_kg <- initial_kg[, colSums(initial_kg<=10)]
+
+rm(dhx01, medsy01, abcd_cols)
+
+# in our manual curation, we accidentally pulled some factor level columns that are genuinely factors, but there are some factor columns that aren't truly factors (these have factor level of 1)
+# grab factor level columns that have maximum of 1 level to keep in initial_kg, and the 1 age column
+factor_kg <- (Filter(is.factor, initial_kg))
+factor_kg <- subset(factor_kg, select = -c(`subjectid`, `src_subject_id`, `eventname`))
+factor_keep <- factor_kg %>% select_if(~ nlevels(.) == 1) # get cols with only 1 level bc those are numerical
+factor_keep_age <- factor_kg[names(factor_kg) %like% 'Age|age'] # get cols related to age
+# remove all the cols in factor_kg from initial_kg, the re-bind the valid columns from factor_keep and factor_keep_age back to initial_kg
+initial_kg <- initial_kg[,!(names(initial_kg) %in% names(factor_kg))]
+initial_kg <- cbind(initial_kg, factor_keep, factor_keep_age)
+
+
 # grab cols from NDA Aliases
 deap_aliases_updated <- read.csv(file = '/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/DEAP.aliases.updated.2.0.1.csv')
 
 
+
+
+
 # find cols in RDS dataframe that are also in desired cols of dictionary
 initial_kg <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
+initial_kg_cols <- data.frame(names(initial_kg))
+abcd_cols <- data.frame(names(abcd_sub))
 missing_cols <- data.frame(selected_cols_names_only[which(!selected_cols_names_only %in% names(abcd_sub))])
 colnames(missing_cols)[1] ="cols_missing"
+
+missing_cols <- initial_kg_cols[(initial_kg_cols %in% abcd_cols)]
 
 missing_cols_found_in_deap <- data.frame(missing_cols$cols_missing[(missing_cols$cols_missing %in% deap_aliases_updated$nda)])
 colnames(missing_cols_found_in_deap)[1] ="deap_missing_cols"
