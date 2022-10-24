@@ -118,15 +118,14 @@ table(sapply(numerical_kg,class)) # check that only first 3 columns are factor (
 
 no_subject_id_kg <- numerical_kg[!names(numerical_kg) %in% c("subjectid", "src_subject_id", "eventname")]
 
-filtering <- data.frame(colSums(numerical_kg != 0, na.rm=TRUE))  
+# get columns where the total number of observations exceeds 10 
+filtering <- data.frame(colSums(numerical_kg != 0, na.rm=TRUE)) 
+# filtering$cols <- rownames(filtering)
+# rownames(filtering) <- NULL
 filtering$log = ifelse(filtering$colSums.numerical_kg....0..na.rm...TRUE. > 0,TRUE,FALSE)
-
-
-
-
-
-
-
+filtering <- filter(filtering, log == TRUE)
+filtering <- t(filtering)
+numerical_kg_clean <- numerical_kg[colnames(numerical_kg) %in% colnames(filtering)]
 
 
 
