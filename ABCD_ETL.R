@@ -14,7 +14,7 @@ unique(abcd_sub$eventname)
 abcd_baseline <- abcd3[abcd3$eventname %like% "baseline", ]
 
 # get a subset of data easier to work with (get only baseline readings)
-abcd_sub <- abcd_baseline[1:2000,]
+abcd_sub <- abcd_baseline[1:5000,]
 rm(abcd3, abcd_baseline) # remove big data, work with subset
 
 # retrieve data dictionary so we know what we're looking at 
@@ -100,12 +100,31 @@ factor_kg <- subset(factor_kg, select = -c(`subjectid`, `src_subject_id`, `event
 factor_keep <- factor_kg %>% select_if(~ nlevels(.) == 1) # get cols with only 1 level bc those are numerical
 factor_keep_age <- factor_kg[names(factor_kg) %like% 'Age|age'] # get cols related to age
 # remove all the cols in factor_kg from initial_kg, the re-bind the valid columns from factor_keep and factor_keep_age back to initial_kg
-initial_kg <- initial_kg[,!(names(initial_kg) %in% names(factor_kg))]
+numerical_kg <- initial_kg <- initial_kg[,!(names(initial_kg) %in% names(factor_kg))]
 initial_kg <- cbind(initial_kg, factor_keep, factor_keep_age)
-
 
 # grab cols from NDA Aliases
 deap_aliases_updated <- read.csv(file = '/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/DEAP.aliases.updated.2.0.1.csv')
+
+# names(factor_keep) # getting all keep factor columns 
+# unique(initial_kg$devhx_8_alchohol_avg_dk_p) #  see what the factor columns we're keeping look like ... are they really numerical or not
+
+dtype_cols <- names(initial_kg)[!names(initial_kg) %in% c("subjectid", "src_subject_id", "eventname")]
+values <- abcd_dict[abcd_dict$ElementName %in% dtype_cols,"ValueRange"]
+dtype_cols <- cbind(dtype_cols, values)
+
+# first get all integer cols and see if can run correlations on that
+table(sapply(numerical_kg,class)) # check that only first 3 columns are factor (subject id, ndar id, and eventname)
+
+no_subject_id_kg <- numerical_kg[!names(numerical_kg) %in% c("subjectid", "src_subject_id", "eventname")]
+
+filtering <- data.frame(colSums(numerical_kg != 0, na.rm=TRUE))  
+filtering$log = ifelse(filtering$colSums.numerical_kg....0..na.rm...TRUE. > 0,TRUE,FALSE)
+
+
+
+
+
 
 
 
