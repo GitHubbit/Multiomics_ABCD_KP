@@ -127,8 +127,29 @@ filtering <- filter(filtering, log == TRUE)
 filtering <- t(filtering)
 numerical_kg_clean <- numerical_kg[colnames(numerical_kg) %in% colnames(filtering)]
 
+# conduct Shapiro-wilk's test for normality on each column
+num_kg <- data.frame(sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric)) # force all cols to numeric
+num_kg <- sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric) # force all cols to numeric
+
+# tack the first 3 cols of metadata back on
+numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
+                            numerical_kg_clean$src_subject_id,
+                            numerical_kg_clean$eventname,
+                            num_kg)
+
+apply(num_kg,2,shapiro.test)
 
 
+# get cor matrix on all df
+cor_mat <- cor(num_kg, method="spearman", use = "pairwise.complete.obs")
+
+
+
+
+
+
+
+# *     ---------***** ~~~~~~~      ---------***** ~~~~~~~ ---------***** ~~~~~~~       * #
 # find cols in RDS dataframe that are also in desired cols of dictionary
 initial_kg <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
 initial_kg_cols <- data.frame(names(initial_kg))
