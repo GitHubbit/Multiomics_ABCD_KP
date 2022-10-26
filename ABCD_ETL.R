@@ -142,22 +142,33 @@ numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
                             numerical_kg_clean$eventname,
                             num_kg)
 
-apply(num_kg,2,shapiro.test)
+# apply(num_kg,2,shapiro.test)
 
-corr_mat <- rcorr.adjust(num_kg, type="spearman", use="pairwise.complete.obs", )
+corr_mat <- rcorr(num_kg, type="spearman")
+# threshold <- corr_mat$n < 10
 corr_mat$threshold[corr_mat$n < 10] <- 0 # ignore less than 10 observations
-corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"),ncol=ncol(corr_mat$P)) # calculated adjusted p-value using BH method, reconstruct matrix of same dimensions
+corr_mat$threshold <- matrix(corr_mat$threshold, ncol=ncol(corr_mat$r))
+corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
 
-  
 test_p_val <- function(r,p) {
-  apply(ifelse(p<0.05, r, "fail"))
+  return(ifelse(p<0.05, r, "not sig adj p"))
   
 }
 
-test <- test_p_val(corr_mat$r, corr_mat$adj_p) 
+corr_mat$sig_r <- matrix(mapply(test_p_val, corr_mat$r, corr_mat$adj_p), ncol = ncol(corr_mat$r), dimnames = dimnames(corr_mat$r))
+corr_mat$sig_r <- matrix(as.numeric(corr_mat$sig_r), ncol = ncol(corr_mat$r), dimnames = dimnames(corr_mat$r))
 
-  # ifelse(x<0.05, corr_mat$r[[x]], "p-val fail")
-})
+View(data.frame(corr_mat$sig_r))
+
+
+
+
+
+
+
+
+
+
 
 
 
