@@ -3,7 +3,7 @@
 setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R')
 
 install.packages("librarian")
-librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "bcdstats")
+librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "tibble")
 
 rm(list=ls())
 abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds")
@@ -150,15 +150,67 @@ corr_mat$threshold[corr_mat$n < 10] <- 0 # ignore less than 10 observations
 corr_mat$threshold <- matrix(corr_mat$threshold, ncol=ncol(corr_mat$r))
 corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
 
-test_p_val <- function(r,p) {
-  return(ifelse(p<0.05, r, "not sig adj p"))
+test_p_val <- function(r,p) {     # this filter isn't working
+  return(ifelse(p<0.05, r, NA))
+
   
 }
 
 corr_mat$sig_r <- matrix(mapply(test_p_val, corr_mat$r, corr_mat$adj_p), ncol = ncol(corr_mat$r), dimnames = dimnames(corr_mat$r))
 corr_mat$sig_r <- matrix(as.numeric(corr_mat$sig_r), ncol = ncol(corr_mat$r), dimnames = dimnames(corr_mat$r))
+View(corr_mat$sig_r)
+# let's visualize results in correlation plot
+
+flat_cor_mat <- function(cor_r, cor_p){
+  #This function provides a simple formatting of a correlation matrix
+  #into a table with 4 columns containing :
+  # Column 1 : row names (variable 1 for the correlation test)
+  # Column 2 : column names (variable 2 for the correlation test)
+  # Column 3 : the correlation coefficients
+  # Column 4 : the p-values of the correlations
+  cor_r <- rownames_to_column(as.data.frame(cor_r), var = "row")
+  cor_r <- gather(cor_r, column, cor, -1)
+  cor_p <- rownames_to_column(as.data.frame(cor_p), var = "row")
+  cor_p <- gather(cor_p, column, adj_p, -1)
+  cor_p_matrix <- left_join(cor_r, cor_p, by = c("row", "column"))
+  cor_p_matrix
+}
 
 
+flat_cor_matrix <- flat_cor_mat(corr_mat$r, corr_mat$adj_p) 
+# drop rows where adjusted p-val
+head(flat_cor_matrix)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#prepare to drop duplicates and correlations of 1     
+corr_mat$sig_r[lower.tri(corr_mat$sig_r,diag=TRUE)] <- NA 
+#drop perfect correlations
+corr_mat$sig_r[corr_mat$sig_r == 1] <- NA 
+
+#turn into a 3-column table
+corr_mat$sig_r <- as.data.frame(as.table(corr_mat$sig_r))
+#remove the NA values from above 
+corr_mat$sig_r <- na.omit(corr_mat$sig_r) 
+
+
+
+write.table(corr_mat$sig_r, file="test.txt") 
+
+dirname(getwd())
 
 
 
