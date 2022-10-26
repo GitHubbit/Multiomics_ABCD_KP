@@ -145,17 +145,36 @@ numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
 apply(num_kg,2,shapiro.test)
 
 corr_mat <- rcorr.adjust(num_kg, type="spearman", use="pairwise.complete.obs", )
-corr_mat$threshold[corr_mat$n < 10] < -0
-View(corr_mat$r)
+corr_mat$threshold[corr_mat$n < 10] <- 0 # ignore less than 10 observations
+corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"),ncol=ncol(corr_mat$P)) # calculated adjusted p-value using BH method, reconstruct matrix of same dimensions
 
-View(data.frame(corr_mat$threshold))
+  
+test_p_val <- function(r,p) {
+  apply(ifelse(p<0.05, r, "fail"))
+  
+}
 
-x<-matrix(nrow=10,ncol=10,data=runif(100))
-x[x>0.5]<-NA
-result<-rcorr(x)
-result$r[result$n<5]<-0 # ignore less than five observations
-result$r
+test <- test_p_val(corr_mat$r, corr_mat$adj_p) 
 
+  # ifelse(x<0.05, corr_mat$r[[x]], "p-val fail")
+})
+
+
+
+
+
+
+a <- matrix(c("a", "b", "c", "d"))
+
+p <- matrix(c(0.001, 0.45, 1.3, 0.00006))
+p_adj <- matrix(c(0.01,1,0.004,5))
+
+
+test <- matrix(a[ifelse(b, T, NA)], ncol = ncol(a))
+test <- matrix(a[ifelse(p_adj<0.05, p_adj, "p_val fail")], ncol = ncol(a))
+
+
+test <- matrix(a[ifelse(b>a, a, NA)], ncol = ncol(a))
 
 
 
