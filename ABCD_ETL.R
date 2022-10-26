@@ -3,7 +3,7 @@
 setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R')
 
 install.packages("librarian")
-librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr")
+librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "bcdstats")
 
 rm(list=ls())
 abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds")
@@ -14,8 +14,9 @@ unique(abcd_sub$eventname)
 abcd_baseline <- abcd3[abcd3$eventname %like% "baseline", ]
 
 # get a subset of data easier to work with (get only baseline readings)
-abcd_sub <- abcd_baseline[1:5000,]
-rm(abcd3, abcd_baseline) # remove big data, work with subset
+# abcd_sub <- abcd_baseline[1:5000,]
+abcd_sub <- abcd_baseline
+rm(abcd3) # remove big data, work with subset
 
 # retrieve data dictionary so we know what we're looking at 
 dict_files <- list.files(path="/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCDstudyDEAP_2.0/dictionary", pattern=".csv", full.names=T)
@@ -128,8 +129,12 @@ filtering <- t(filtering)
 numerical_kg_clean <- numerical_kg[colnames(numerical_kg) %in% colnames(filtering)]
 
 # conduct Shapiro-wilk's test for normality on each column
-num_kg <- data.frame(sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric)) # force all cols to numeric
+# num_kg <- data.frame(sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric)) # force all cols to numeric
 num_kg <- sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric) # force all cols to numeric
+
+# num_kg <- num_kg[which(apply(num_kg, 2, function(f) sum(!is.na(f)) >= 3))]
+# data_test_numerics_only_filled_colums = data_test_numerics_only[which(apply(data_test_numerics_only, 2, function(f) sum(!is.na(f)) >= 3))]
+
 
 # tack the first 3 cols of metadata back on
 numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
@@ -139,13 +144,37 @@ numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
 
 apply(num_kg,2,shapiro.test)
 
+corr_mat <- rcorr.adjust(num_kg, type="spearman", use="pairwise.complete.obs", )
+corr_mat$threshold[corr_mat$n < 10] < -0
+View(corr_mat$r)
+
+View(data.frame(corr_mat$threshold))
+
+x<-matrix(nrow=10,ncol=10,data=runif(100))
+x[x>0.5]<-NA
+result<-rcorr(x)
+result$r[result$n<5]<-0 # ignore less than five observations
+result$r
+
+
+
+
+
+
+
+
 
 # get cor matrix on all df
 cor_mat <- cor(num_kg, method="spearman", use = "pairwise.complete.obs")
 
+ggcorr(num_kg, method = c("pairwise.complete.obs", "spearman"))
 
 
+test_cor_mat <- cor_mat
 
+result <- rcorr(num_kg, type="spearman")
+result$r[result$n<5]<-0 # ignore less than five observations
+result$r
 
 
 
