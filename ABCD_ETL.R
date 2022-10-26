@@ -158,7 +158,6 @@ test_p_val <- function(r,p) {
 corr_mat$sig_r <- matrix(mapply(test_p_val, corr_mat$r, corr_mat$adj_p), ncol = ncol(corr_mat$r), dimnames = dimnames(corr_mat$r))
 corr_mat$sig_r <- matrix(as.numeric(corr_mat$sig_r), ncol = ncol(corr_mat$r), dimnames = dimnames(corr_mat$r))
 
-View(data.frame(corr_mat$sig_r))
 
 
 
@@ -175,36 +174,9 @@ View(data.frame(corr_mat$sig_r))
 
 
 
-a <- matrix(c("a", "b", "c", "d"))
-
-p <- matrix(c(0.001, 0.45, 1.3, 0.00006))
-p_adj <- matrix(c(0.01,1,0.004,5))
-
-
-test <- matrix(a[ifelse(b, T, NA)], ncol = ncol(a))
-test <- matrix(a[ifelse(p_adj<0.05, p_adj, "p_val fail")], ncol = ncol(a))
-
-
-test <- matrix(a[ifelse(b>a, a, NA)], ncol = ncol(a))
 
 
 
-
-
-
-
-
-# get cor matrix on all df
-cor_mat <- cor(num_kg, method="spearman", use = "pairwise.complete.obs")
-
-ggcorr(num_kg, method = c("pairwise.complete.obs", "spearman"))
-
-
-test_cor_mat <- cor_mat
-
-result <- rcorr(num_kg, type="spearman")
-result$r[result$n<5]<-0 # ignore less than five observations
-result$r
 
 
 
