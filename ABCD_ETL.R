@@ -3,7 +3,7 @@
 setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R')
 
 install.packages("librarian")
-librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "tibble")
+librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "tibble", "corrplot")
 
 rm(list=ls())
 abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds")
@@ -150,17 +150,10 @@ corr_mat$threshold[corr_mat$n < 10] <- 0 # ignore less than 10 observations
 corr_mat$threshold <- matrix(corr_mat$threshold, ncol=ncol(corr_mat$r))
 corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
 
-test_p_val <- function(r,p) {     # this filter isn't working
-  return(ifelse(p<0.05, r, NA))
 
-  
-}
+# let's visualize results in corr network
 
-corr_mat$sig_r <- matrix(mapply(test_p_val, corr_mat$r, corr_mat$adj_p), ncol = ncol(corr_mat$r), dimnames = dimnames(corr_mat$r))
-corr_mat$sig_r <- matrix(as.numeric(corr_mat$sig_r), ncol = ncol(corr_mat$r), dimnames = dimnames(corr_mat$r))
-View(corr_mat$sig_r)
-# let's visualize results in correlation plot
-
+# function to flatten correlation matrix to rows
 flat_cor_mat <- function(cor_r, cor_p){
   #This function provides a simple formatting of a correlation matrix
   #into a table with 4 columns containing :
@@ -176,13 +169,37 @@ flat_cor_mat <- function(cor_r, cor_p){
   cor_p_matrix
 }
 
-
 flat_cor_matrix <- flat_cor_mat(corr_mat$r, corr_mat$adj_p) 
-# drop rows where adjusted p-val
 head(flat_cor_matrix)
 
+# drop rows where adjusted p-val is <0.05 [optional: and r=1]
+vis <- flat_cor_matrix[flat_cor_matrix$adj_p < 0.05, ]
+vis <- vis[complete.cases(vis), ]
+vis_c <- vis[,c("row", "column", "cor")]
+vis_p <- vis[,c("row", "column", "adj_p")]
+
+vis_c <- vis_c %>% pivot_wider(names_from = column, values_from = cor)
+vis_p <- vis_p %>% pivot_wider(names_from = column, values_from = adj_p)
 
 
+
+
+
+
+
+
+
+
+
+# drop rows where perfect correlation bc they are the same variable
+# vis[!duplicated(df1[c("x1","x2")]),]
+vis <- vis[order(vis$adj_p, vis$cor),]
+
+
+
+
+
+corrplot(vis, order = "hclust")
 
 
 
