@@ -3,7 +3,7 @@
 setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R')
 
 install.packages("librarian")
-librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "tibble", "corrplot")
+librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "tibble", "corrplot", "lares", "ggplot2")
 
 rm(list=ls())
 abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds")
@@ -142,14 +142,16 @@ numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
                             numerical_kg_clean$eventname,
                             num_kg)
 
+values_count_per_col <- data.frame(colSums(num_kg !=0, na.rm=TRUE)) # get count of nonzero and non-na values in each column
+flat_cor_matrix[flat_cor_matrix$adj_p < 0.05, ]
+
+# test for normality of data. Can't perform shapiro wilk bc size has to be btw 3-5000. 
 # apply(num_kg,2,shapiro.test)
 
-corr_mat <- rcorr(num_kg, type="spearman")
-# threshold <- corr_mat$n < 10
-corr_mat$threshold[corr_mat$n < 10] <- 0 # ignore less than 10 observations
-corr_mat$threshold <- matrix(corr_mat$threshold, ncol=ncol(corr_mat$r))
-corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
 
+corr_mat <- rcorr(num_kg, type="spearman")
+corr_mat$r[corr_mat$n < 10] <- NA # ignore less than 10 observations
+corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
 
 # let's visualize results in corr network
 
@@ -174,18 +176,47 @@ head(flat_cor_matrix)
 
 # drop rows where adjusted p-val is <0.05 [optional: and r=1]
 vis <- flat_cor_matrix[flat_cor_matrix$adj_p < 0.05, ]
+# remove rows where there's 0 correlation
+vis <- vis[vis$cor != 0, ]
 vis <- vis[complete.cases(vis), ]
+
+vis <- vis[order(vis$adj_p, vis$cor),]
+
+vis$concat <- paste(vis$row, " + ", vis$column)
+
+p <- data.frame(vis$concat, vis$cor, vis$adj_p)
+
+write.csv(vis,file='abcd_spearman_corr.csv', row.names=FALSE)
+
+
+p_top <- head(p[order(p$vis.adj_p, p$vis.cor),], 50)
+p_down <- head(p[order(p$vis.adj_p, -p$vis.cor),], 50)
+
+bar_corr_top <- ggplot(p, aes(x=vis.cor, y=vis.concat)) + geom_bar(stat = "identity")
+bar_corr_down
+
+
+
+# turning it back into matrix
 vis_c <- vis[,c("row", "column", "cor")]
 vis_p <- vis[,c("row", "column", "adj_p")]
 
 vis_c <- vis_c %>% pivot_wider(names_from = column, values_from = cor)
+vis_c <- as.matrix(vis_c %>% remove_rownames() %>% column_to_rownames(var='row'))
 vis_p <- vis_p %>% pivot_wider(names_from = column, values_from = adj_p)
+vis_p <- as.matrix(vis_p %>% remove_rownames() %>% column_to_rownames(var='row'))
 
 
+test <- corrplot(vis_c, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+
+test <- corr_cross(vis_c, rm.na = TRUE, max_pvalue = 0.01, top = 15)
+test
 
 
+vis_c
 
-
+corrplot(vis_c, type="upper", is.corr = FALSE)
 
 
 
@@ -194,6 +225,7 @@ vis_p <- vis_p %>% pivot_wider(names_from = column, values_from = adj_p)
 # drop rows where perfect correlation bc they are the same variable
 # vis[!duplicated(df1[c("x1","x2")]),]
 vis <- vis[order(vis$adj_p, vis$cor),]
+
 
 
 
