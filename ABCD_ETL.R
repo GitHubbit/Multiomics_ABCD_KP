@@ -148,10 +148,10 @@ flat_cor_matrix[flat_cor_matrix$adj_p < 0.05, ]
 # test for normality of data. Can't perform shapiro wilk bc size has to be btw 3-5000. 
 # apply(num_kg,2,shapiro.test)
 
-
 corr_mat <- rcorr(num_kg, type="spearman")
 corr_mat$r[corr_mat$n < 10] <- NA # ignore less than 10 observations
 corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
+
 
 # let's visualize results in corr network
 
@@ -178,9 +178,53 @@ head(flat_cor_matrix)
 vis <- flat_cor_matrix[flat_cor_matrix$adj_p < 0.05, ]
 # remove rows where there's 0 correlation
 vis <- vis[vis$cor != 0, ]
+#### add pseudocount for p-values that = 0 so it is plottable
+vis["adj_p"][vis["adj_p"] == 0] <- 1E-20
+
 vis <- vis[complete.cases(vis), ]
+# remove duplicate rows 
+
+# remove weakly correlated pairs (r between -0.5 and +0.5)
+# vis <- subset(vis, cor < -0.5 | cor > 0.5)
+
+# we are building correlation network, so row and column pair should be non duplicated
+# in other words, housing_1(row) and smoking_4(column) have correlation of 0.87
+# we want to delete row in vis where it's a repeat, smoking_4(row) and housing_1(column) have correlation of 0.87
+# if we don't do this, we will get bi-directional edges between the same 2 nodes
+vis <- vis[!duplicated(t(apply(vis[,c(1,2)],1,sort))),]  # sort first 2 cols of vis dataframe, transpose, get non-duplicates
 
 vis <- vis[order(vis$adj_p, vis$cor),]
+vis["neg_log_p_val"] <- data.frame(-log10(vis$adj_p))
+
+
+
+
+p_histo <- hist(vis$neg_log_p_val,breaks=60) 
+p_histo
+# from plot, -log(p-val)=1.75 on x-axis = endpoint of first 2 bars
+# x or adjusted p-val = 0.01778279
+# let's capture all adj p-vals that are < 0.01778379
+vis_sub <- subset(vis, adj_p<0.01778379)
+p_histo <- hist(vis_sub$neg_log_p_val,breaks=60) 
+
+
+
+ggplot(vis, aes(x=neg_log_p_val, y = ifelse(..count.. < 4500, ..count.., 0))) +
+  geom_histogram(bins=50, fill="red", color="maroon") +
+  stat_bin(aes(label=..count..), geom="text", vjust = -0.7)
+
+p_histo <- ggplot(vis, aes(x=neg_log_p_val, y = ifelse(..count.., ..count.., 0))) +
+  geom_histogram(bins=50, fill="red", color="maroon") +
+  stat_bin(aes(label=..count..), geom="text", vjust = -0.7)
+
+
+hggplot() + aes(neg_log_p_val)+ geom_histogram(binwidth=1, colour="black", fill="white")
+
+
+ggplot(neg_log_p_val, aes(x="neg_log_p_val", y = ifelse(..count.. > 2000, ..count.., 0))) +
+  geom_histogram(bins=30) 
+
+
 
 vis$concat <- paste(vis$row, " + ", vis$column)
 
