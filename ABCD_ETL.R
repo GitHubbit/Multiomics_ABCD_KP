@@ -196,9 +196,6 @@ vis <- vis[!duplicated(t(apply(vis[,c(1,2)],1,sort))),]  # sort first 2 cols of 
 vis <- vis[order(vis$adj_p, vis$cor),]
 vis["neg_log_p_val"] <- data.frame(-log10(vis$adj_p))
 
-
-
-
 p_histo <- hist(vis$neg_log_p_val,breaks=60) 
 p_histo
 # from plot, -log(p-val)=1.75 on x-axis = endpoint of first 2 bars
@@ -206,6 +203,38 @@ p_histo
 # let's capture all adj p-vals that are < 0.01778379
 vis_sub <- subset(vis, adj_p<0.01778379)
 p_histo <- hist(vis_sub$neg_log_p_val,breaks=60) 
+
+# let's capture all correlations between any 2 variables not in the same table
+vis$row_sub <- sub("\\_.*", "", vis$row)
+vis$col_sub <- sub("\\_.*", "", vis$col)
+vis_dtab <- vis[which(vis$row_sub != vis$col_sub),]
+
+# plot distribution of correlation values
+corr_histo <- hist(as.numeric(vis$corr), xlim = range(-1,1)) 
+corr_histo_data <- hist(vis$cor)
+                   # breaks=seq(-1,1,0.2), xlim=c(-1,1),
+                   # ylim = c(0,12000), yaxp=c(0,12000,500),
+                   # xlab="Correlation",
+                   # main="Distribution of Correlations")
+corr_hist
+
+corr_histo <- ggplot(vis, aes(x=cor, y=log(..count..))) +
+  geom_histogram(color="black", fill="red", binwidth = 0.1) +
+  scale_y_continuous(breaks=seq(0,10,0.5)) +
+  scale_x_continuous(breaks = seq(-1, 1, 0.1))
+  
+
+corr_histo  
+
+hist.data <- hist(vis$cor, plot=F)
+hist.data$counts
+
+
+
+
+
+
+
 
 
 
@@ -218,7 +247,7 @@ p_histo <- ggplot(vis, aes(x=neg_log_p_val, y = ifelse(..count.., ..count.., 0))
   stat_bin(aes(label=..count..), geom="text", vjust = -0.7)
 
 
-hggplot() + aes(neg_log_p_val)+ geom_histogram(binwidth=1, colour="black", fill="white")
+ggplot() + aes(neg_log_p_val)+ geom_histogram(binwidth=1, colour="black", fill="white")
 
 
 ggplot(neg_log_p_val, aes(x="neg_log_p_val", y = ifelse(..count.. > 2000, ..count.., 0))) +
@@ -230,7 +259,7 @@ vis$concat <- paste(vis$row, " + ", vis$column)
 
 p <- data.frame(vis$concat, vis$cor, vis$adj_p)
 
-write.csv(vis,file='abcd_spearman_corr.csv', row.names=FALSE)
+write.csv(vis_dtab,file='abcd_spearman_corr.csv', row.names=FALSE)
 
 
 p_top <- head(p[order(p$vis.adj_p, p$vis.cor),], 50)
@@ -276,7 +305,6 @@ vis <- vis[order(vis$adj_p, vis$cor),]
 
 
 corrplot(vis, order = "hclust")
-
 
 
 
