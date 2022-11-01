@@ -3,7 +3,7 @@
 setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R')
 
 install.packages("librarian")
-librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "tibble", "corrplot", "lares", "ggplot2")
+librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "tibble", "corrplot", "Hmisc", "ggplot2", "RColorBrewer")
 
 rm(list=ls())
 abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds")
@@ -16,7 +16,7 @@ abcd_baseline <- abcd3[abcd3$eventname %like% "baseline", ]
 # get a subset of data easier to work with (get only baseline readings)
 # abcd_sub <- abcd_baseline[1:5000,]
 abcd_sub <- abcd_baseline
-rm(abcd3) # remove big data, work with subset
+rm(abcd3, abcd_baseline) # remove big data, work with subset
 
 # retrieve data dictionary so we know what we're looking at 
 dict_files <- list.files(path="/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCDstudyDEAP_2.0/dictionary", pattern=".csv", full.names=T)
@@ -143,7 +143,6 @@ numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
                             num_kg)
 
 values_count_per_col <- data.frame(colSums(num_kg !=0, na.rm=TRUE)) # get count of nonzero and non-na values in each column
-flat_cor_matrix[flat_cor_matrix$adj_p < 0.05, ]
 
 # test for normality of data. Can't perform shapiro wilk bc size has to be btw 3-5000. 
 # apply(num_kg,2,shapiro.test)
@@ -156,7 +155,7 @@ corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat
 # let's visualize results in corr network
 
 # function to flatten correlation matrix to rows
-flat_cor_mat <- function(cor_r, cor_p){
+flat_cor_mat <- function(cor_r, cor_p, cor_n){
   #This function provides a simple formatting of a correlation matrix
   #into a table with 4 columns containing :
   # Column 1 : row names (variable 1 for the correlation test)
@@ -167,11 +166,14 @@ flat_cor_mat <- function(cor_r, cor_p){
   cor_r <- gather(cor_r, column, cor, -1)
   cor_p <- rownames_to_column(as.data.frame(cor_p), var = "row")
   cor_p <- gather(cor_p, column, adj_p, -1)
+  cor_n <- rownames_to_column(as.data.frame(cor_n), var = "row")
+  cor_n <- gather(cor_n, column, n, -1)
   cor_p_matrix <- left_join(cor_r, cor_p, by = c("row", "column"))
+  cor_p_matrix <- left_join(cor_p_matrix, cor_n, by = c("row", "column"))
   cor_p_matrix
 }
 
-flat_cor_matrix <- flat_cor_mat(corr_mat$r, corr_mat$adj_p) 
+flat_cor_matrix <- flat_cor_mat(corr_mat$r, corr_mat$adj_p, corr_mat$n) 
 head(flat_cor_matrix)
 
 # drop rows where adjusted p-val is <0.05 [optional: and r=1]
@@ -210,32 +212,43 @@ vis$col_sub <- sub("\\_.*", "", vis$col)
 vis_dtab <- vis[which(vis$row_sub != vis$col_sub),]
 
 # plot distribution of correlation values
-corr_histo <- hist(as.numeric(vis$corr), xlim = range(-1,1)) 
-corr_histo_data <- hist(vis$cor)
-                   # breaks=seq(-1,1,0.2), xlim=c(-1,1),
-                   # ylim = c(0,12000), yaxp=c(0,12000,500),
-                   # xlab="Correlation",
-                   # main="Distribution of Correlations")
-corr_hist
+corr_histo_data <- hist(vis$cor, plot=F) # just to see counts per bin, etc
+hist.data$counts
+
 
 corr_histo <- ggplot(vis, aes(x=cor, y=log(..count..))) +
   geom_histogram(color="black", fill="red", binwidth = 0.1) +
   scale_y_continuous(breaks=seq(0,10,0.5)) +
   scale_x_continuous(breaks = seq(-1, 1, 0.1))
   
+# scatterplot of adj-p val vs Correlation
+ggplot(vis, aes(x=adj_p, y=cor, color=n)) + 
+  geom_point(size=3) +
+  ggtitle("Scatterplot Adj p-val vs Corr") +
+  scale_x_continuous(breaks = seq(0, 0.05, 0.005)) +
+  scale_y_continuous(breaks = seq(-1, 1, 0.1)) +
+  scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000))
+ 
+# below code plays around with color palette options in ggplot
+# scale_colour_gradientn(colours = )
+# mycolors = c(brewer.pal(name="Dark2", n = 8), brewer.pal(name="Paired", n = 6))
+# colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12)
 
-corr_histo  
-
-hist.data <- hist(vis$cor, plot=F)
-hist.data$counts
-
-
-
-
-
+# scatterplot of -log(adj-p val) vs Correlation
+ggplot(vis, aes(x=-log(adj_p), y=cor, color=n)) + 
+  geom_point(size=3) +
+  ggtitle("Scatterplot -log(Adj p-val) vs Corr") +
+  scale_x_continuous(breaks = seq(0, 50, 5)) +
+  scale_y_continuous(breaks = seq(-1, 1, 0.1)) +
+  scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000))
 
 
 
+display.brewer.pal(name = 'YlOrRd')
+scale_color_brewer(palette = "Dark2")
+
+ggplot(vis, aes(x=-log(adj_p), y=cor)) + 
+  geom_point()
 
 
 ggplot(vis, aes(x=neg_log_p_val, y = ifelse(..count.. < 4500, ..count.., 0))) +
