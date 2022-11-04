@@ -3,7 +3,10 @@
 setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R')
 
 install.packages("librarian")
-librarian::shelf("data.table", "R.utils", "tidyverse", "tidyr", "stringr", "tibble", "corrplot", "Hmisc", "ggplot2", "RColorBrewer")
+librarian::shelf("data.table", "R.utils", "tidyverse",
+                 "tidyr", "stringr", "tibble",
+                 "corrplot", "Hmisc", "ggplot2",
+                 "RColorBrewer", "rvest")
 
 rm(list=ls())
 abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds")
@@ -220,6 +223,12 @@ corr_histo <- ggplot(vis, aes(x=cor, y=log(..count..))) +
   geom_histogram(color="black", fill="red", binwidth = 0.1) +
   scale_y_continuous(breaks=seq(0,10,0.5)) +
   scale_x_continuous(breaks = seq(-1, 1, 0.1))
+
+n_hist <- ggplot(vis, aes(x=n, y=log(..count..))) +
+  geom_histogram(color="black", fill="red", binwidth=10) +
+  # scale_y_continuous(breaks=seq(0,8000,500)) +
+  scale_x_continuous(breaks = seq(0, 12000, 1000))
+n_hist
   
 # scatterplot of adj-p val vs Correlation
 ggplot(vis, aes(x=adj_p, y=cor, color=n)) + 
@@ -229,10 +238,6 @@ ggplot(vis, aes(x=adj_p, y=cor, color=n)) +
   scale_y_continuous(breaks = seq(-1, 1, 0.1)) +
   scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000))
  
-# below code plays around with color palette options in ggplot
-# scale_colour_gradientn(colours = )
-# mycolors = c(brewer.pal(name="Dark2", n = 8), brewer.pal(name="Paired", n = 6))
-# colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12)
 
 # scatterplot of -log(adj-p val) vs Correlation
 ggplot(vis, aes(x=-log(adj_p), y=cor, color=n)) + 
@@ -242,171 +247,106 @@ ggplot(vis, aes(x=-log(adj_p), y=cor, color=n)) +
   scale_y_continuous(breaks = seq(-1, 1, 0.1)) +
   scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000))
 
+# write all of the various correlation tables to a CSV to open in Cytoscape as a network
+write.csv(vis_dtab,
+          file='abcd_spearman_corr.csv',
+          row.names=FALSE)
 
+# we need the descriptions of the tables bc the data dictionary isn't informative enough about what the column names/nodes in network mean
+# web scrape the NIMH (https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL) data dictionary table descriptions to get better understanding of what column means
+abcd_data_dict_2_url <- "https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL"
+# download.file(abcd_data_dict_2_url, destfile = 'abcd_data_dict_2.html') # uncomment to scrape
+abcd_dict_2 <- read_html("abcd_data_dict_2_url.html")
+tab_shortnames <- abcd_dict_2 %>% html_nodes("td.short-name-column") %>% html_text() 
+tab_links <- abcd_dict_2 %>% html_elements("td.short-name-column") %>% html_elements("a") %>% html_attr("href")
+tab_links <-  paste("https://nda.nih.gov", tab_links, sep="")
+abcd_tabs <- data.frame(tab_shortnames, tab_links)
 
-display.brewer.pal(name = 'YlOrRd')
-scale_color_brewer(palette = "Dark2")
+download_all <- function(df_row) {
+  # print(df_row)
+  table_url <- df_row[2]
+  # print(paste(df_row[1],'.html', sep=""))
+  download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
+  return(tryCatch(download.file(table_url, destfile = paste(df_row[1],'.html')), error=function(e) NULL))
+  
+}
 
-ggplot(vis, aes(x=-log(adj_p), y=cor)) + 
-  geom_point()
+# setting up the main directory
+main_dir <- getwd()
+# setting up the sub directory
+sub_dir <- "abcd_tables_html"
+if (file.exists(sub_dir)){
+  # specifying the working directory
+  setwd(file.path(main_dir, sub_dir))
+} else {
+  # create a new sub directory inside
+  # the main path
+  dir.create(file.path(main_dir, sub_dir))
+  # specifying the working directory
+  setwd(file.path(main_dir, sub_dir))
+  apply(abcd_tabs, MARGIN=1, download_all)
+  
+}
 
 
-ggplot(vis, aes(x=neg_log_p_val, y = ifelse(..count.. < 4500, ..count.., 0))) +
-  geom_histogram(bins=50, fill="red", color="maroon") +
-  stat_bin(aes(label=..count..), geom="text", vjust = -0.7)
 
-p_histo <- ggplot(vis, aes(x=neg_log_p_val, y = ifelse(..count.., ..count.., 0))) +
-  geom_histogram(bins=50, fill="red", color="maroon") +
-  stat_bin(aes(label=..count..), geom="text", vjust = -0.7)
 
+table_url <- "https://nda.nih.gov/data_structure.html?short_name=acspsw03"
+download.file(table_url, destfile = paste('.html')) # uncomment to scrape
 
-ggplot() + aes(neg_log_p_val)+ geom_histogram(binwidth=1, colour="black", fill="white")
+table_pg <- read_html("table_url.html")
 
 
-ggplot(neg_log_p_val, aes(x="neg_log_p_val", y = ifelse(..count.. > 2000, ..count.., 0))) +
-  geom_histogram(bins=30) 
 
 
 
-vis$concat <- paste(vis$row, " + ", vis$column)
+library(futile.logger)
+library(utils)
 
-p <- data.frame(vis$concat, vis$cor, vis$adj_p)
+retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors=5, sleep=0) {
+  attempts = 0
+  retval = try(eval(expr))
+  while (isError(retval)) {
+    attempts = attempts + 1
+    if (attempts >= maxErrors) {
+      msg = sprintf("retry: too many retries [[%s]]", capture.output(str(retval)))
+      flog.fatal(msg)
+      stop(msg)
+    } else {
+      msg = sprintf("retry: error in attempt %i/%i [[%s]]", attempts,  maxErrors, 
+                    capture.output(str(retval)))
+      flog.error(msg)
+      warning(msg)
+      
+    }
+    if (sleep > 0) Sys.sleep(sleep)
+    retval = try(eval(expr))
+  }
+  return(retval)
+}
 
-write.csv(vis_dtab,file='abcd_spearman_corr.csv', row.names=FALSE)
 
 
-p_top <- head(p[order(p$vis.adj_p, p$vis.cor),], 50)
-p_down <- head(p[order(p$vis.adj_p, -p$vis.cor),], 50)
 
-bar_corr_top <- ggplot(p, aes(x=vis.cor, y=vis.concat)) + geom_bar(stat = "identity")
-bar_corr_down
 
 
 
-# turning it back into matrix
-vis_c <- vis[,c("row", "column", "cor")]
-vis_p <- vis[,c("row", "column", "adj_p")]
 
-vis_c <- vis_c %>% pivot_wider(names_from = column, values_from = cor)
-vis_c <- as.matrix(vis_c %>% remove_rownames() %>% column_to_rownames(var='row'))
-vis_p <- vis_p %>% pivot_wider(names_from = column, values_from = adj_p)
-vis_p <- as.matrix(vis_p %>% remove_rownames() %>% column_to_rownames(var='row'))
 
 
-test <- corrplot(vis_c, type = "upper", order = "hclust", 
-         tl.col = "black", tl.srt = 45)
 
-test <- corr_cross(vis_c, rm.na = TRUE, max_pvalue = 0.01, top = 15)
-test
 
 
-vis_c
 
-corrplot(vis_c, type="upper", is.corr = FALSE)
 
 
 
 
 
-# drop rows where perfect correlation bc they are the same variable
-# vis[!duplicated(df1[c("x1","x2")]),]
-vis <- vis[order(vis$adj_p, vis$cor),]
 
 
 
 
-
-
-corrplot(vis, order = "hclust")
-
-
-
-
-
-
-
-
-
-
-
-
-#prepare to drop duplicates and correlations of 1     
-corr_mat$sig_r[lower.tri(corr_mat$sig_r,diag=TRUE)] <- NA 
-#drop perfect correlations
-corr_mat$sig_r[corr_mat$sig_r == 1] <- NA 
-
-#turn into a 3-column table
-corr_mat$sig_r <- as.data.frame(as.table(corr_mat$sig_r))
-#remove the NA values from above 
-corr_mat$sig_r <- na.omit(corr_mat$sig_r) 
-
-
-
-write.table(corr_mat$sig_r, file="test.txt") 
-
-dirname(getwd())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# *     ---------***** ~~~~~~~      ---------***** ~~~~~~~ ---------***** ~~~~~~~       * #
-# find cols in RDS dataframe that are also in desired cols of dictionary
-initial_kg <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
-initial_kg_cols <- data.frame(names(initial_kg))
-abcd_cols <- data.frame(names(abcd_sub))
-missing_cols <- data.frame(selected_cols_names_only[which(!selected_cols_names_only %in% names(abcd_sub))])
-colnames(missing_cols)[1] ="cols_missing"
-
-missing_cols <- initial_kg_cols[(initial_kg_cols %in% abcd_cols)]
-
-missing_cols_found_in_deap <- data.frame(missing_cols$cols_missing[(missing_cols$cols_missing %in% deap_aliases_updated$nda)])
-colnames(missing_cols_found_in_deap)[1] ="deap_missing_cols"
-
-test <- data.frame(names(initial_kg))
-test <- setdiff(missing_cols_found_in_deap$deap_missing_cols, )
-
-# cols_of_abcd <- data.frame(names(abcd_sub))
-# cols_of_abcd2 <- data.frame(abcd_sub$eventname)
-# cols_of_abcd3 <- data.frame(abcd_sub$event_name)
-# 
-# test <- names(abcd_sub)
-# test[!str_detect(names(abcd_sub), "medhx_6c_times_l")]
-
-
-# initial_kg_cols_2 <- abcd_sub[,abcd_sub %in% selected_cols_names_only)]
-
-# initial_kg_cols <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
-
-initial_kg[is.na(initial_kg)] <- 0
-
-factor_cols <- names(Filter(is.factor, initial_kg))
-factor_cols
-
-REPLACE ALL NA WITH 0 (FIND WHICH ARE NUMERICAL COLUMNS AND WHICH ARE FACTOR)
-ADD COLS TO FIND FROM NDA ALIAS FILE
-
-
-View(data.frame(selected_cols_names_only))
-View(data.frame(names(initial_kg_cols)))
-
-length(selected_cols$ElementName)
 
 
 
