@@ -6,7 +6,8 @@ install.packages("librarian")
 librarian::shelf("data.table", "R.utils", "tidyverse",
                  "tidyr", "stringr", "tibble",
                  "corrplot", "Hmisc", "ggplot2",
-                 "RColorBrewer", "rvest")
+                 "RColorBrewer", "rvest", "utils",
+                 "futile.logger")
 
 rm(list=ls())
 abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds")
@@ -266,10 +267,11 @@ download_all <- function(df_row) {
   # print(df_row)
   table_url <- df_row[2]
   # print(paste(df_row[1],'.html', sep=""))
-  download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
+  # download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
   return(tryCatch(download.file(table_url, destfile = paste(df_row[1],'.html')), error=function(e) NULL))
   
 }
+
 
 # setting up the main directory
 main_dir <- getwd()
@@ -291,19 +293,10 @@ if (file.exists(sub_dir)){
 
 
 
-table_url <- "https://nda.nih.gov/data_structure.html?short_name=acspsw03"
-download.file(table_url, destfile = paste('.html')) # uncomment to scrape
-
-table_pg <- read_html("table_url.html")
-
-
-
-
-
 library(futile.logger)
 library(utils)
 
-retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors=5, sleep=0) {
+retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors=3, sleep=0) {
   attempts = 0
   retval = try(eval(expr))
   while (isError(retval)) {
@@ -326,8 +319,21 @@ retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors
 }
 
 
+download_all <- function(df_row) {
+  # print(df_row)
+  table_url <- df_row[2]
+  # print(paste(df_row[1],'.html', sep=""))
+  download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
+  # return(tryCatch(download.file(table_url, destfile = paste(df_row[1],'.html')), error=function(e) NULL))
+  retry(download.file(table_url, destfile = paste(df_row[1],'.html')), maxErrors = 5, sleep = 20)
+  
+  
+}
 
 
+
+
+retry(any_function(x), maxErrors = 5, sleep = 20)
 
 
 
