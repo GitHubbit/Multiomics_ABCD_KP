@@ -263,15 +263,47 @@ tab_links <- abcd_dict_2 %>% html_elements("td.short-name-column") %>% html_elem
 tab_links <-  paste("https://nda.nih.gov", tab_links, sep="")
 abcd_tabs <- data.frame(tab_shortnames, tab_links)
 
+# download_all <- function(df_row) {
+#   # print(df_row)
+#   table_url <- df_row[2]
+#   # print(paste(df_row[1],'.html', sep=""))
+#   # download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
+#   return(tryCatch(download.file(table_url, destfile = paste(df_row[1],'.html')), error=function(e) NULL))
+#   
+# }
+
+
+retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors=3, sleep=0) {
+  attempts = 0
+  retval = try(eval(expr))
+  while (isError(retval)) {
+    attempts = attempts + 1
+    if (attempts >= maxErrors) {
+      msg = sprintf("retry: too many retries [[%s]]", capture.output(str(retval)))
+      flog.fatal(msg)
+      # stop(msg)
+      break
+    } else {
+      msg = sprintf("retry: error in attempt %i/%i [[%s]]", attempts,  maxErrors, 
+                    capture.output(str(retval)))
+      flog.error(msg)
+      warning(msg)
+      
+    }
+    if (sleep > 0) Sys.sleep(sleep)
+    retval = try(eval(expr))
+  }
+  return(retval)
+}
+
 download_all <- function(df_row) {
   # print(df_row)
   table_url <- df_row[2]
   # print(paste(df_row[1],'.html', sep=""))
   # download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
-  return(tryCatch(download.file(table_url, destfile = paste(df_row[1],'.html')), error=function(e) NULL))
+  retry(download.file(table_url, destfile = paste(df_row[1],'.html', sep="")), maxErrors = 5, sleep = 20)
   
 }
-
 
 # setting up the main directory
 main_dir <- getwd()
@@ -287,53 +319,29 @@ if (file.exists(sub_dir)){
   # specifying the working directory
   setwd(file.path(main_dir, sub_dir))
   apply(abcd_tabs, MARGIN=1, download_all)
-  
+  setwd("..")
 }
 
 
+# we need the descriptions of the tables bc the data dictionary isn't informative enough about what the column names/nodes in network mean
+# web scrape the NIMH (https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL) data dictionary table descriptions to get better understanding of what column means
+# download.file(abcd_data_dict_2_url, destfile = 'abcd_data_dict_2.html') # uncomment to scrape
+html_pg <- read_html("/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R/abcd_tables_html/abcd_tables_html/abcd_tables_html/abcd_asrs01.html")
 
 
-library(futile.logger)
-library(utils)
 
-retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors=3, sleep=0) {
-  attempts = 0
-  retval = try(eval(expr))
-  while (isError(retval)) {
-    attempts = attempts + 1
-    if (attempts >= maxErrors) {
-      msg = sprintf("retry: too many retries [[%s]]", capture.output(str(retval)))
-      flog.fatal(msg)
-      stop(msg)
-    } else {
-      msg = sprintf("retry: error in attempt %i/%i [[%s]]", attempts,  maxErrors, 
-                    capture.output(str(retval)))
-      flog.error(msg)
-      warning(msg)
-      
-    }
-    if (sleep > 0) Sys.sleep(sleep)
-    retval = try(eval(expr))
-  }
-  return(retval)
-}
-
-
-download_all <- function(df_row) {
-  # print(df_row)
-  table_url <- df_row[2]
-  # print(paste(df_row[1],'.html', sep=""))
-  download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
-  # return(tryCatch(download.file(table_url, destfile = paste(df_row[1],'.html')), error=function(e) NULL))
-  retry(download.file(table_url, destfile = paste(df_row[1],'.html')), maxErrors = 5, sleep = 20)
-  
-  
-}
+tab_shortnames <- abcd_dict_2 %>% html_nodes("td.short-name-column") %>% html_text() 
+tab_links <- abcd_dict_2 %>% html_elements("td.short-name-column") %>% html_elements("a") %>% html_attr("href")
+tab_links <-  paste("https://nda.nih.gov", tab_links, sep="")
+abcd_tabs <- data.frame(tab_shortnames, tab_links)
 
 
 
 
-retry(any_function(x), maxErrors = 5, sleep = 20)
+
+
+
+
 
 
 
