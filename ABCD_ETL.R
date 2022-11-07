@@ -94,7 +94,6 @@ selected_cols_names_only <- unique(selected_cols_names_only[selected_cols_names_
 
 initial_kg <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
 
-# initial_kg <- initial_kg[, colSums(initial_kg<=10)]
 
 rm(dhx01, medsy01, abcd_cols)
 
@@ -124,7 +123,7 @@ table(sapply(numerical_kg,class)) # check that only first 3 columns are factor (
 no_subject_id_kg <- numerical_kg[!names(numerical_kg) %in% c("subjectid", "src_subject_id", "eventname")]
 
 # get columns where the total number of observations exceeds 10 
-filtering <- data.frame(colSums(numerical_kg != 0, na.rm=TRUE)) 
+filtering <- data.frame(colSums(numerical_kg != 0, na.rm=TRUE) > 10) 
 # filtering$cols <- rownames(filtering)
 # rownames(filtering) <- NULL
 filtering$log = ifelse(filtering$colSums.numerical_kg....0..na.rm...TRUE. > 0,TRUE,FALSE)
@@ -136,8 +135,6 @@ numerical_kg_clean <- numerical_kg[colnames(numerical_kg) %in% colnames(filterin
 # num_kg <- data.frame(sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric)) # force all cols to numeric
 num_kg <- sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric) # force all cols to numeric
 
-# num_kg <- num_kg[which(apply(num_kg, 2, function(f) sum(!is.na(f)) >= 3))]
-# data_test_numerics_only_filled_colums = data_test_numerics_only[which(apply(data_test_numerics_only, 2, function(f) sum(!is.na(f)) >= 3))]
 
 
 # tack the first 3 cols of metadata back on
@@ -263,16 +260,6 @@ tab_links <- abcd_dict_2 %>% html_elements("td.short-name-column") %>% html_elem
 tab_links <-  paste("https://nda.nih.gov", tab_links, sep="")
 abcd_tabs <- data.frame(tab_shortnames, tab_links)
 
-# download_all <- function(df_row) {
-#   # print(df_row)
-#   table_url <- df_row[2]
-#   # print(paste(df_row[1],'.html', sep=""))
-#   # download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
-#   return(tryCatch(download.file(table_url, destfile = paste(df_row[1],'.html')), error=function(e) NULL))
-#   
-# }
-
-
 retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors=3, sleep=0) {
   attempts = 0
   retval = try(eval(expr))
@@ -326,19 +313,40 @@ if (file.exists(sub_dir)){
 # we need the descriptions of the tables bc the data dictionary isn't informative enough about what the column names/nodes in network mean
 # web scrape the NIMH (https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL) data dictionary table descriptions to get better understanding of what column means
 # download.file(abcd_data_dict_2_url, destfile = 'abcd_data_dict_2.html') # uncomment to scrape
-html_pg <- read_html("/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R/abcd_tables_html/abcd_tables_html/abcd_tables_html/abcd_asrs01.html")
+html_pg <- read_html("/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R/abcd_tables_html/acspsw03.html")
+table_des <- html_pg %>% html_elements("div.ds-main-properties") %>% html_element("span")  %>% html_text() # get the table description
+
+# write function to scrape all table descriptions
+extract_table_des <- function(html_file) {
+  table_name <- sub(pattern = "(.*)\\..*$", replacement = "\\1", html_file) # take off file extension (e.g. ".html")
+  html_pg <- read_html(html_file)
+  table_des <- html_pg %>% html_elements("div.ds-main-properties") %>% html_element("span")  %>% html_text() # get the table description
+  table_info <- list(table_name, table_des)
+  # print(table_info)
+  
+}
+
+# run extract_table_des function to scrape all table descriptions on folder of downloaded ABCD tables (.html files)
+if (file.exists(sub_dir)){
+  # specifying the working directory
+  setwd(file.path(main_dir, sub_dir))
+  htmls <- list.files(".")
+
+  lapply(htmls, extract_table_des)
+  setwd("..")
+  
+} else {
+  print("Unable to scrape directory of downloaded ABCD tables, check the directory named abcd_tables_html")
+  setwd(file.path(main_dir))
+}
 
 
 
-tab_shortnames <- abcd_dict_2 %>% html_nodes("td.short-name-column") %>% html_text() 
-tab_links <- abcd_dict_2 %>% html_elements("td.short-name-column") %>% html_elements("a") %>% html_attr("href")
-tab_links <-  paste("https://nda.nih.gov", tab_links, sep="")
-abcd_tabs <- data.frame(tab_shortnames, tab_links)
+setwd(file.path(main_dir, sub_dir))
+htmls <- list.files(".")
 
-
-
-
-
+lapply(htmls, extract_table_des)
+setwd("..")
 
 
 
