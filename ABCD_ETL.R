@@ -316,12 +316,14 @@ if (file.exists(sub_dir)){
 html_pg <- read_html("/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R/abcd_tables_html/acspsw03.html")
 table_des <- html_pg %>% html_elements("div.ds-main-properties") %>% html_element("span")  %>% html_text() # get the table description
 
+
 # write function to scrape all table descriptions
 extract_table_des <- function(html_file) {
   table_name <- sub(pattern = "(.*)\\..*$", replacement = "\\1", html_file) # take off file extension (e.g. ".html")
   html_pg <- read_html(html_file)
   table_des <- html_pg %>% html_elements("div.ds-main-properties") %>% html_element("span")  %>% html_text() # get the table description
   table_info <- list(table_name, table_des)
+  return(table_info)
   # print(table_info)
   
 }
@@ -332,7 +334,9 @@ if (file.exists(sub_dir)){
   setwd(file.path(main_dir, sub_dir))
   htmls <- list.files(".")
 
-  lapply(htmls, extract_table_des)
+  table_details <- lapply(htmls, extract_table_des)
+  table_details <- as.data.frame(do.call(rbind, table_details))
+  
   setwd("..")
   
 } else {
@@ -342,6 +346,11 @@ if (file.exists(sub_dir)){
 
 
 
+
+
+
+
+test <- 
 setwd(file.path(main_dir, sub_dir))
 htmls <- list.files(".")
 
