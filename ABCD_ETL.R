@@ -152,27 +152,7 @@ corr_mat$r[corr_mat$n < 10] <- NA # ignore less than 10 observations
 corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
 
 # let's visualize results in corr network
-
-# function to flatten correlation matrix to rows
-flat_cor_mat <- function(cor_r, cor_p, cor_n){
-  #This function provides a simple formatting of a correlation matrix
-  #into a table with 4 columns containing :
-  # Column 1 : row names (variable 1 for the correlation test)
-  # Column 2 : column names (variable 2 for the correlation test)
-  # Column 3 : the correlation coefficients
-  # Column 4 : the p-values of the correlations
-  cor_r <- rownames_to_column(as.data.frame(cor_r), var = "row")
-  cor_r <- gather(cor_r, column, cor, -1)
-  cor_p <- rownames_to_column(as.data.frame(cor_p), var = "row")
-  cor_p <- gather(cor_p, column, adj_p, -1)
-  cor_n <- rownames_to_column(as.data.frame(cor_n), var = "row")
-  cor_n <- gather(cor_n, column, n, -1)
-  cor_p_matrix <- left_join(cor_r, cor_p, by = c("row", "column"))
-  cor_p_matrix <- left_join(cor_p_matrix, cor_n, by = c("row", "column"))
-  cor_p_matrix
-}
-
-
+# flatten the matrices / pivot_long
 pivoted_r <- as.data.frame.table(corr_mat$r, responseName = "corr")
 pivoted_r <- pivoted_r[!duplicated(t(apply(pivoted_r[,c(1,2)],1,sort))),]  # sort first 2 cols of vis dataframe, transpose, get non-duplicates
 pivoted_r <- pivoted_r[pivoted_r$Var1 != pivoted_r$Var2,]
@@ -194,45 +174,12 @@ pivoted_padj <- pivoted_padj[pivoted_padj$Var1 != pivoted_padj$Var2,]
 pivoted_padj <- pivoted_padj[!is.na(pivoted_padj$adj_p),]
 
 # join all pivoted matrices 
-
 corr_info <- list(pivoted_r, pivoted_n, pivoted_p, pivoted_padj) %>% reduce(left_join, by=c("Var1","Var2"))
-corr_info <- corr_info[complete.cases(corr_info), ]
-
-test<-corr_info[rowSums(is.na(corr_info))==0,]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-flat_cor_matrix <- flat_cor_mat(corr_mat$r, corr_mat$adj_p, corr_mat$n) 
-head(flat_cor_matrix)
+corr_info <- corr_info[complete.cases(corr_info), ] #unnecessary
+rm(list = c("pivoted_padj","pivoted_p","pivoted_n","pivoted_r"))
 
 # drop rows where adjusted p-val is <0.05 [optional: and r=1]
-vis <- flat_cor_matrix[flat_cor_matrix$adj_p < 0.05, ]
+vis <- corr_info[corr_info$adj_p < 0.05, ]
 # remove rows where there's 0 correlation
 vis <- vis[vis$cor != 0, ]
 #### add pseudocount for p-values that = 0 so it is plottable
