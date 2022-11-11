@@ -13,7 +13,7 @@ rm(list=ls())
 abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds")
 
 unique(abcd_sub$event_name) # see what types eventnames there are (there are baseline, 1 year 6 month, etc readings)
-unique(abcd_sub$eventname)
+
 # get only baseline readings
 abcd_baseline <- abcd3[abcd3$eventname %like% "baseline", ]
 
@@ -123,18 +123,17 @@ table(sapply(numerical_kg,class)) # check that only first 3 columns are factor (
 no_subject_id_kg <- numerical_kg[!names(numerical_kg) %in% c("subjectid", "src_subject_id", "eventname")]
 
 # get columns where the total number of observations exceeds 10 
-filtering <- data.frame(colSums(numerical_kg != 0, na.rm=TRUE) > 10) 
+filtering <- data.frame(colSums(numerical_kg != 0, na.rm=TRUE)) 
 # filtering$cols <- rownames(filtering)
 # rownames(filtering) <- NULL
-filtering$log = ifelse(filtering$colSums.numerical_kg....0..na.rm...TRUE. > 0,TRUE,FALSE)
-filtering <- filter(filtering, log == TRUE)
+filtering$check = ifelse(filtering$colSums.numerical_kg....0..na.rm...TRUE. > 10,TRUE,FALSE)
+filtering <- filter(filtering, check == TRUE)
 filtering <- t(filtering)
 numerical_kg_clean <- numerical_kg[colnames(numerical_kg) %in% colnames(filtering)]
 
-# conduct Shapiro-wilk's test for normality on each column
+# conduct Shapiro-wilk's test for normality on each column (won't work, we have >5000 observations for many cols)
 # num_kg <- data.frame(sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric)) # force all cols to numeric
 num_kg <- sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric) # force all cols to numeric
-
 
 
 # tack the first 3 cols of metadata back on
@@ -151,7 +150,6 @@ values_count_per_col <- data.frame(colSums(num_kg !=0, na.rm=TRUE)) # get count 
 corr_mat <- rcorr(num_kg, type="spearman")
 corr_mat$r[corr_mat$n < 10] <- NA # ignore less than 10 observations
 corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
-
 
 # let's visualize results in corr network
 
@@ -173,6 +171,62 @@ flat_cor_mat <- function(cor_r, cor_p, cor_n){
   cor_p_matrix <- left_join(cor_p_matrix, cor_n, by = c("row", "column"))
   cor_p_matrix
 }
+
+
+pivoted_r <- as.data.frame.table(corr_mat$r, responseName = "corr")
+pivoted_r <- pivoted_r[!duplicated(t(apply(pivoted_r[,c(1,2)],1,sort))),]  # sort first 2 cols of vis dataframe, transpose, get non-duplicates
+pivoted_r <- pivoted_r[pivoted_r$Var1 != pivoted_r$Var2,]
+pivoted_r <- pivoted_r[!is.na(pivoted_r$corr),]
+
+pivoted_n <- as.data.frame.table(corr_mat$n, responseName = "n")
+pivoted_n <- pivoted_n[!duplicated(t(apply(pivoted_n[,c(1,2)],1,sort))),]  # sort first 2 cols of vis dataframe, transpose, get non-duplicates
+pivoted_n <- pivoted_n[pivoted_n$Var1 != pivoted_n$Var2,]
+pivoted_n <- pivoted_n[!is.na(pivoted_n$n),]
+
+pivoted_p <- as.data.frame.table(corr_mat$P, responseName = "p_val")
+pivoted_p <- pivoted_p[!duplicated(t(apply(pivoted_p[,c(1,2)],1,sort))),]  # sort first 2 cols of vis dataframe, transpose, get non-duplicates
+pivoted_p <- pivoted_p[pivoted_p$Var1 != pivoted_p$Var2,]
+pivoted_p <- pivoted_p[!is.na(pivoted_p$p_val),]
+
+pivoted_padj <- as.data.frame.table(corr_mat$adj_p, responseName = "adj_p")
+pivoted_padj <- pivoted_padj[!duplicated(t(apply(pivoted_padj[,c(1,2)],1,sort))),]  # sort first 2 cols of vis dataframe, transpose, get non-duplicates
+pivoted_padj <- pivoted_padj[pivoted_padj$Var1 != pivoted_padj$Var2,]
+pivoted_padj <- pivoted_padj[!is.na(pivoted_padj$adj_p),]
+
+# join all pivoted matrices 
+
+corr_info <- list(pivoted_r, pivoted_n, pivoted_p, pivoted_padj) %>% reduce(left_join, by=c("Var1","Var2"))
+corr_info <- corr_info[complete.cases(corr_info), ]
+
+test<-corr_info[rowSums(is.na(corr_info))==0,]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 flat_cor_matrix <- flat_cor_mat(corr_mat$r, corr_mat$adj_p, corr_mat$n) 
 head(flat_cor_matrix)
@@ -253,13 +307,14 @@ write.csv(vis_dtab,
 # we need the descriptions of the tables bc the data dictionary isn't informative enough about what the column names/nodes in network mean
 # web scrape the NIMH (https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL) data dictionary table descriptions to get better understanding of what column means
 abcd_data_dict_2_url <- "https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL"
-# download.file(abcd_data_dict_2_url, destfile = 'abcd_data_dict_2.html') # uncomment to scrape
-abcd_dict_2 <- read_html("abcd_data_dict_2_url.html")
+download.file(abcd_data_dict_2_url, destfile = 'abcd_data_dict_2.html') # uncomment to scrape
+abcd_dict_2 <- read_html("abcd_data_dict_2.html")
 tab_shortnames <- abcd_dict_2 %>% html_nodes("td.short-name-column") %>% html_text() 
 tab_links <- abcd_dict_2 %>% html_elements("td.short-name-column") %>% html_elements("a") %>% html_attr("href")
 tab_links <-  paste("https://nda.nih.gov", tab_links, sep="")
 abcd_tabs <- data.frame(tab_shortnames, tab_links)
 
+# function to retry downloading html pages
 retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors=3, sleep=0) {
   attempts = 0
   retval = try(eval(expr))
@@ -283,15 +338,15 @@ retry <- function(expr, isError=function(x) "try-error" %in% class(x), maxErrors
   return(retval)
 }
 
+# download all html pages, use retry function
 download_all <- function(df_row) {
-  # print(df_row)
   table_url <- df_row[2]
-  # print(paste(df_row[1],'.html', sep=""))
-  # download.file(table_url, destfile = paste(df_row[1],'.html')) # uncomment to scrape
   retry(download.file(table_url, destfile = paste(df_row[1],'.html', sep="")), maxErrors = 5, sleep = 20)
   
 }
 
+
+# download all tables html pages in ABCD 2.0 release and dump in folder if it doesn't exist already
 # setting up the main directory
 main_dir <- getwd()
 # setting up the sub directory
@@ -309,33 +364,25 @@ if (file.exists(sub_dir)){
   setwd("..")
 }
 
-
-# we need the descriptions of the tables bc the data dictionary isn't informative enough about what the column names/nodes in network mean
-# web scrape the NIMH (https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL) data dictionary table descriptions to get better understanding of what column means
-# download.file(abcd_data_dict_2_url, destfile = 'abcd_data_dict_2.html') # uncomment to scrape
-html_pg <- read_html("/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R/abcd_tables_html/acspsw03.html")
-table_des <- html_pg %>% html_elements("div.ds-main-properties") %>% html_element("span")  %>% html_text() # get the table description
-
-
-# write function to scrape all table descriptions
+# function to scrape all table descriptions from downloaded htmls
 extract_table_des <- function(html_file) {
   table_name <- sub(pattern = "(.*)\\..*$", replacement = "\\1", html_file) # take off file extension (e.g. ".html")
   html_pg <- read_html(html_file)
   table_des <- html_pg %>% html_elements("div.ds-main-properties") %>% html_element("span")  %>% html_text() # get the table description
-  table_info <- list(table_name, table_des)
+  table_info <- c(table_name, table_des)
   return(table_info)
-  # print(table_info)
-  
+
 }
 
-# run extract_table_des function to scrape all table descriptions on folder of downloaded ABCD tables (.html files)
+# run extract_table_des function to scrape all table descriptions on folder of downloaded ABCD tables (.html files), dump into dataframe called tabled_details
 if (file.exists(sub_dir)){
   # specifying the working directory
   setwd(file.path(main_dir, sub_dir))
   htmls <- list.files(".")
-
   table_details <- lapply(htmls, extract_table_des)
   table_details <- as.data.frame(do.call(rbind, table_details))
+  colnames(table_details)[colnames(table_details) == "V1"] ="table_name"
+  colnames(table_details)[colnames(table_details) == "V2"] ="table_description"
   
   setwd("..")
   
@@ -344,40 +391,56 @@ if (file.exists(sub_dir)){
   setwd(file.path(main_dir))
 }
 
+write.csv(table_details,
+          file='abcd_tables_des.csv',
+          row.names=FALSE,
+          quote=FALSE)
+
+# add the COLUMN descriptions to the vis table for better clarity about what the columns mean
+#change col names of abcd_dict to allow merging, map column or ABCD descriptions to their columns
+temp_dict <- subset(abcd_dict, select=c("ElementName", "ElementDescription", "table"))
+
+# conduct mapping for "row" column  
+# JOIN BY ELEMENT DESCRIPTION AND TABLE NAME
+colnames(temp_dict)[colnames(temp_dict) == "ElementName"] ="row"
+vis <- vis %>% left_join(temp_dict, by=c("row"))
+colnames(vis)[colnames(vis) == "ElementDescription"] ="row_description"
+
+# conduct mapping for "column" column
+colnames(temp_dict)[colnames(temp_dict) == "row"] ="column"
+vis <- vis %>% left_join(temp_dict, by=c("column"))
+colnames(vis)[colnames(vis) == "ElementDescription"] ="column_description"
+
+# add the TABLE names to the vis table for better clarity about what the columns mean
+temp_dict <- subset(abcd_dict, select=c("table_name", "ElementName"))
+colnames(temp_dict)[colnames(temp_dict) == "ElementName"] ="row"
+vis <- vis %>% left_join(temp_dict, by=c("row"))
+colnames(vis)[colnames(vis) == "table_name"] ="row_table_name"
+
+colnames(temp_dict)[colnames(temp_dict) == "row"] ="column"
+vis <- vis %>% left_join(temp_dict, by=c("column"))
+colnames(vis)[colnames(vis) == "table_name"] ="col_table_name"
+
+# add the TABLE descriptions to the vis table for better clarity about what the columns mean
+colnames(vis)[colnames(vis) == "row_table_name"] ="table_name"
+vis <- vis %>% left_join(table_details, by=c("table_name"))
+colnames(vis)[colnames(vis) == "table_name"] ="row_table_name"
+colnames(vis)[colnames(vis) == "table_description"] ="row_table_des"
+
+colnames(vis)[colnames(vis) == "col_table_name"] ="table_name"
+vis <- vis %>% left_join(table_details, by=c("table_name"))
+colnames(vis)[colnames(vis) == "table_name"] ="col_table_name"
+colnames(vis)[colnames(vis) == "table_description"] ="col_table_des"
+
+# add the TABLE descriptions to the vis table for better clarity about what the columns mean
+# write all of the various correlation tables to a CSV to open in Cytoscape as a network
+write.csv(vis,
+          file='abcd_spearman_corr_all.csv',
+          row.names=FALSE)
 
 
 
 
-
-
-test <- 
-setwd(file.path(main_dir, sub_dir))
-htmls <- list.files(".")
-
-lapply(htmls, extract_table_des)
-setwd("..")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#GOALS
+OUTPUT FILE THAT HAS TABLES AND DESCRIPTIONS
+OUTPUT ROWS AND EDGES TSVS
