@@ -95,7 +95,7 @@ selected_cols_names_only <- unique(selected_cols_names_only[selected_cols_names_
 initial_kg <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
 
 
-rm(dhx01, medsy01, abcd_cols)
+rm(dhx01, medsy01)
 
 # in our manual curation, we accidentally pulled some factor level columns that are genuinely factors, but there are some factor columns that aren't truly factors (these have factor level of 1)
 # grab factor level columns that have maximum of 1 level to keep in initial_kg, and the 1 age column
@@ -153,8 +153,12 @@ corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat
 
 # let's visualize results in corr network
 # flatten the matrices / pivot_long
+# Note 1: we are building correlation network, so row and column pair should be non duplicated
+# Note 1: in other words, housing_1(row) and smoking_4(column) have correlation of 0.87
+# Note 1: we want to delete row where it's a repeat, smoking_4(row) and housing_1(column) have correlation of 0.87
+# Note 1: if we don't do this, we will get bi-directional edges between the same 2 nodes
 pivoted_r <- as.data.frame.table(corr_mat$r, responseName = "corr")
-pivoted_r <- pivoted_r[!duplicated(t(apply(pivoted_r[,c(1,2)],1,sort))),]  # sort first 2 cols of vis dataframe, transpose, get non-duplicates
+pivoted_r <- pivoted_r[!duplicated(t(apply(pivoted_r[,c(1,2)],1,sort))),]  # Note 1*: sort first 2 cols of vis dataframe, transpose, get non-duplicates
 pivoted_r <- pivoted_r[pivoted_r$Var1 != pivoted_r$Var2,]
 pivoted_r <- pivoted_r[!is.na(pivoted_r$corr),]
 
@@ -191,12 +195,6 @@ vis <- vis[complete.cases(vis), ]
 # remove weakly correlated pairs (r between -0.5 and +0.5)
 # vis <- subset(vis, cor < -0.5 | cor > 0.5)
 
-# we are building correlation network, so row and column pair should be non duplicated
-# in other words, housing_1(row) and smoking_4(column) have correlation of 0.87
-# we want to delete row in vis where it's a repeat, smoking_4(row) and housing_1(column) have correlation of 0.87
-# if we don't do this, we will get bi-directional edges between the same 2 nodes
-vis <- vis[!duplicated(t(apply(vis[,c(1,2)],1,sort))),]  # sort first 2 cols of vis dataframe, transpose, get non-duplicates
-
 vis <- vis[order(vis$adj_p, vis$cor),]
 vis["neg_log_p_val"] <- data.frame(-log10(vis$adj_p))
 
@@ -209,9 +207,9 @@ vis_sub <- subset(vis, adj_p<0.01778379)
 p_histo <- hist(vis_sub$neg_log_p_val,breaks=60) 
 
 # let's capture all correlations between any 2 variables not in the same table
-vis$row_sub <- sub("\\_.*", "", vis$row)
-vis$col_sub <- sub("\\_.*", "", vis$col)
-vis_dtab <- vis[which(vis$row_sub != vis$col_sub),]
+vis$Var1_sub <- sub("\\_.*", "", vis$Var1)
+vis$Var2_sub <- sub("\\_.*", "", vis$Var2)
+vis_dtab <- vis[which(vis$Var1_sub != vis$Var2_sub),]
 
 # plot distribution of correlation values
 corr_histo_data <- hist(vis$cor, plot=F) # just to see counts per bin, etc
@@ -345,11 +343,112 @@ write.csv(table_details,
 
 # add the COLUMN descriptions to the vis table for better clarity about what the columns mean
 #change col names of abcd_dict to allow merging, map column or ABCD descriptions to their columns
-temp_dict <- subset(abcd_dict, select=c("ElementName", "ElementDescription", "table"))
 
-# conduct mapping for "row" column  
+
+
+# conduct mapping for "Var1" column  
 # JOIN BY ELEMENT DESCRIPTION AND TABLE NAME
-colnames(temp_dict)[colnames(temp_dict) == "ElementName"] ="row"
+
+# the data dictionary has multiple rows/tables for interview_age, interview_date, and subject_key which blows up size of KG/vis when I try and left_join
+# make the data dictionary have only 1 table and 1 description
+abcd_dict <- abcd_dict[!grepl("interview_age",abcd_dict$ElementName), ]
+abcd_dict <- abcd_dict %>% add_row(table_name = NA,
+                                   ElementName = "interview_age",
+                                   DataType = "Integer",
+                                   Size = NA,
+                                   Required = NA,
+                                   Condition = NA,
+                                   ElementDescription = 'Age in months at the time of the interview/test/sampling/imaging.',
+                                   ValueRange = "0::1260",
+                                   Notes = "Age is rounded to chronological month. If the research participant is 15-days-old at time of interview, the appropriate value would be 0 months. If the participant is 16-days-old, the value would be 1 month.",
+                                   Aliases = NA)
+
+abcd_dict <- abcd_dict[!grepl("interview_date",abcd_dict$ElementName), ]
+abcd_dict <- abcd_dict %>% add_row(table_name = NA,
+                                   ElementName = "interview_date",
+                                   DataType = "Date",
+                                   Size = NA,
+                                   Required = NA,
+                                   Condition = NA,
+                                   ElementDescription = 'Date on which the interview/genetic test/sampling/imaging/biospecimen was completed.',
+                                   ValueRange = NA,
+                                   Notes = NA,
+                                   Aliases = NA)
+
+abcd_dict <- abcd_dict[!grepl("subjectkey",abcd_dict$ElementName), ]
+abcd_dict <- abcd_dict %>% add_row(table_name = NA,
+                                   ElementName = "subjectkey",
+                                   DataType = "GUID",
+                                   Size = NA,
+                                   Required = "Required",
+                                   Condition = NA,
+                                   ElementDescription = 'The NDAR Global Unique Identifier (GUID) for research subject',
+                                   ValueRange = "NDAR*",
+                                   Notes = NA,
+                                   Aliases = NA)
+
+abcd_dict <- abcd_dict[!grepl("src_subject_id",abcd_dict$ElementName), ]
+abcd_dict <- abcd_dict %>% add_row(table_name = NA,
+                                   ElementName = "src_subject_id",
+                                   DataType = "String",
+                                   Size = 20,
+                                   Required = "Required",
+                                   Condition = NA,
+                                   ElementDescription = "Subject ID how it's defined in lab/project",
+                                   ValueRange = NA,
+                                   Notes = NA,
+                                   Aliases = NA)
+
+abcd_dict <- abcd_dict[!grepl("sex",abcd_dict$ElementName), ]
+abcd_dict <- abcd_dict %>% add_row(table_name = NA,
+                                   ElementName = "sex",
+                                   DataType = "String",
+                                   Size = 20,
+                                   Required = "Required",
+                                   Condition = NA,
+                                   ElementDescription = "Sex of the subject",
+                                   ValueRange = NA,
+                                   Notes = "M;F M = Male; F = Female",
+                                   Aliases = "gender")
+
+
+abcd_dict[abcd_dict$ElementName == 'subjectkey',]
+
+
+colnames(vis)[colnames(vis) == "Var1"] ="ElementName"
+
+test <- vis %>% left_join(abcd_dict[, c("table_name", "ElementName", "ElementDescription")], by="ElementName")
+# rename cols
+test <- test %>% 
+  rename("Var1_tablename" = "table_name",
+         "Var1_description" = "ElementDescription",
+         "Var1" = "ElementName")
+
+test1 <- aggregate(Var1_tablename ~., test, toString)
+
+
+
+which(vis$Var1 %in% temp_dict$ElementName) 
+
+
+test <- vis %>% left_join(temp_dict, by=c("ElementName"))
+
+
+vis$Var1 %>% map_chr(abcd_dict$table_name, paste, collapse = "; ")
+
+cols <- names(test)[which(names(test) != "table_name")]
+cols[-length(cols)] <- paste0(cols[-length(cols)], '+')
+cols <- paste0(cols,collapse='', sep='')
+
+
+
+test1 <- aggregate(table_name ~ cols, data = test, c)
+
+map_chr(, paste, collapse = "; ")
+map_chr(str_extract_all(phrase, '\\b[[:alpha:]]+\\b(?=\\sapple)'), paste, collapse = "; ")
+
+
+colnames(temp_dict)[colnames(temp_dict) == "ElementName"] ="Var1"
 vis <- vis %>% left_join(temp_dict, by=c("row"))
 colnames(vis)[colnames(vis) == "ElementDescription"] ="row_description"
 
