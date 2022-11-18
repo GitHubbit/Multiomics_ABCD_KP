@@ -342,12 +342,23 @@ write.csv(table_details,
           quote=FALSE)
 
 # add the COLUMN descriptions to the vis table for better clarity about what the columns mean
-#change col names of abcd_dict to allow merging, map column or ABCD descriptions to their columns
-
-
+# change col names of abcd_dict to allow merging, map column or ABCD descriptions to their columns
 
 # conduct mapping for "Var1" column  
-# JOIN BY ELEMENT DESCRIPTION AND TABLE NAME
+# JOIN BY ELEMENT DESCRIPTION AND TABLE NAME (when this is done, the KG blows up bc there is a column (interview_age) of same name in multiple tables)
+# for clarity, see code between star dashes below
+# ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
+colnames(vis)[colnames(vis) == "Var1"] ="ElementName"
+
+test <- vis %>% left_join(abcd_dict[, c("table_name", "ElementName", "ElementDescription")], by="ElementName")
+# rename cols
+test <- test %>% 
+  rename("Var1_tablename" = "table_name",
+         "Var1_description" = "ElementDescription",
+         "Var1" = "ElementName")
+
+test1 <- aggregate(Var1_tablename ~., test, toString)
+# ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
 
 # the data dictionary has multiple rows/tables for interview_age, interview_date, and subject_key which blows up size of KG/vis when I try and left_join
 # make the data dictionary have only 1 table and 1 description
@@ -363,6 +374,9 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    Notes = "Age is rounded to chronological month. If the research participant is 15-days-old at time of interview, the appropriate value would be 0 months. If the participant is 16-days-old, the value would be 1 month.",
                                    Aliases = NA)
 
+# check that that all rows are deleted and the correct row has been added in place 
+# abcd_dict[abcd_dict$ElementName == 'interview_age',]
+
 abcd_dict <- abcd_dict[!grepl("interview_date",abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ElementName = "interview_date",
@@ -374,6 +388,8 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ValueRange = NA,
                                    Notes = NA,
                                    Aliases = NA)
+# check that that all rows are deleted and the correct row has been added in place 
+# abcd_dict[abcd_dict$ElementName == 'interview_date',]
 
 abcd_dict <- abcd_dict[!grepl("subjectkey",abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
@@ -386,6 +402,8 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ValueRange = "NDAR*",
                                    Notes = NA,
                                    Aliases = NA)
+# check that that all rows are deleted and the correct row has been added in place 
+# abcd_dict[abcd_dict$ElementName == 'subjectkey',]
 
 abcd_dict <- abcd_dict[!grepl("src_subject_id",abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
@@ -398,6 +416,8 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ValueRange = NA,
                                    Notes = NA,
                                    Aliases = NA)
+# check that that all rows are deleted and the correct row has been added in place 
+# abcd_dict[abcd_dict$ElementName == 'src_subject_id',]
 
 abcd_dict <- abcd_dict[!grepl("sex",abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
@@ -410,42 +430,53 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ValueRange = NA,
                                    Notes = "M;F M = Male; F = Female",
                                    Aliases = "gender")
+# check that that all rows are deleted and the correct row has been added in place 
+# abcd_dict[abcd_dict$ElementName == 'sex',]
 
 
-abcd_dict[abcd_dict$ElementName == 'subjectkey',]
-
-
+# NOW add the column descriptions and table names
 colnames(vis)[colnames(vis) == "Var1"] ="ElementName"
-
-test <- vis %>% left_join(abcd_dict[, c("table_name", "ElementName", "ElementDescription")], by="ElementName")
-# rename cols
-test <- test %>% 
-  rename("Var1_tablename" = "table_name",
-         "Var1_description" = "ElementDescription",
-         "Var1" = "ElementName")
-
-test1 <- aggregate(Var1_tablename ~., test, toString)
-
-
-
-which(vis$Var1 %in% temp_dict$ElementName) 
-
-
-test <- vis %>% left_join(temp_dict, by=c("ElementName"))
+vis <- vis %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes")], by="ElementName")
+# rename cols so they correspond to the right variable
+vis <- vis %>% rename("Var1_tablename" = "table_name",
+                      "Var1_description" = "ElementDescription",
+                      "Var1_notes" = "Notes",
+                      "Var1" = "ElementName")
+# repeat for Var2
+colnames(vis)[colnames(vis) == "Var2"] ="ElementName"
+vis <- vis %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes")], by="ElementName")
+# rename cols so they correspond to the right variable
+vis <- vis %>% rename("Var2_tablename" = "table_name",
+                      "Var2_description" = "ElementDescription",
+                      "Var2_notes" = "Notes",
+                      "Var2" = "ElementName")
 
 
-vis$Var1 %>% map_chr(abcd_dict$table_name, paste, collapse = "; ")
+# some column and table descriptions did not get added because the column name is actually in the Aliases column
+# join on Aliases to grab those tables and descriptions
+# add the column descriptions and table names again, this time by trying to find the names in Aliases
+colnames(vis)[colnames(vis) == "Var1"] ="Aliases"
+vis <- vis %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
+# rename cols so they correspond to the right variable
+vis <- vis %>% rename("Var1_Alias_tablename" = "table_name",
+                      "Var1_Alias_description" = "ElementDescription",
+                      "Var1_Alias_notes" = "Notes",
+                      "Var1_Alias" = "Aliases")
 
-cols <- names(test)[which(names(test) != "table_name")]
-cols[-length(cols)] <- paste0(cols[-length(cols)], '+')
-cols <- paste0(cols,collapse='', sep='')
+# repeat for Var2
+colnames(vis)[colnames(vis) == "Var2"] ="Aliases"
+vis <- vis %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
+# rename cols so they correspond to the right variable
+vis <- vis %>% rename("Var2_Alias_tablename" = "table_name",
+                      "Var2_Alias_description" = "ElementDescription",
+                      "Var2_Alias_notes" = "Notes",
+                      "Var2_Alias" = "Aliases")
 
 
 
-test1 <- aggregate(table_name ~ cols, data = test, c)
 
-map_chr(, paste, collapse = "; ")
-map_chr(str_extract_all(phrase, '\\b[[:alpha:]]+\\b(?=\\sapple)'), paste, collapse = "; ")
+
+
 
 
 colnames(temp_dict)[colnames(temp_dict) == "ElementName"] ="Var1"
