@@ -344,7 +344,7 @@ write.csv(table_details,
 # add the COLUMN descriptions to the vis table for better clarity about what the columns mean
 # change col names of abcd_dict to allow merging, map column or ABCD descriptions to their columns
 
-# conduct mapping for "Var1" column  
+# conduct mapping for "Var1" column using ElementName now  
 # JOIN BY ELEMENT DESCRIPTION AND TABLE NAME (when this is done, the KG blows up bc there is a column (interview_age) of same name in multiple tables)
 # for clarity, see code between star dashes below
 # ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
@@ -435,18 +435,19 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
 
 
 # NOW add the column descriptions and table names
-colnames(vis)[colnames(vis) == "Var1"] ="ElementName"
-vis <- vis %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes")], by="ElementName")
+vis_meta <- vis
+colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="ElementName"
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes")], by="ElementName")
 # rename cols so they correspond to the right variable
-vis <- vis %>% rename("Var1_tablename" = "table_name",
+vis_meta <- vis_meta %>% rename("Var1_tablename" = "table_name",
                       "Var1_description" = "ElementDescription",
                       "Var1_notes" = "Notes",
                       "Var1" = "ElementName")
 # repeat for Var2
-colnames(vis)[colnames(vis) == "Var2"] ="ElementName"
-vis <- vis %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes")], by="ElementName")
+colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="ElementName"
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes")], by="ElementName")
 # rename cols so they correspond to the right variable
-vis <- vis %>% rename("Var2_tablename" = "table_name",
+vis_meta <- vis_meta %>% rename("Var2_tablename" = "table_name",
                       "Var2_description" = "ElementDescription",
                       "Var2_notes" = "Notes",
                       "Var2" = "ElementName")
@@ -455,19 +456,84 @@ vis <- vis %>% rename("Var2_tablename" = "table_name",
 # some column and table descriptions did not get added because the column name is actually in the Aliases column
 # join on Aliases to grab those tables and descriptions
 # add the column descriptions and table names again, this time by trying to find the names in Aliases
-colnames(vis)[colnames(vis) == "Var1"] ="Aliases"
-vis <- vis %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
+
+
+# conduct mapping for "Var1" column using ALIASES now  
+# JOIN BY ELEMENT DESCRIPTION AND TABLE NAME (when this is done, the KG blows up bc there is a column (interview_age) of same name in multiple tables)
+# for clarity, see code between star dashes below
+# ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
+colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="Aliases"
+
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
+# rename cols
+vis_meta <- vis_meta %>% 
+  rename("Var1_Alias_tablename" = "table_name",
+         "Var1_Alias_description" = "ElementDescription",
+         "Var1_Alias_notes" = "Notes",
+         "Var1" = "Aliases")
+
+# find rows in test that are not in vis_meta
+extra_rows <- vis_meta[duplicated(vis_meta[,c("Var1", "Var2")]),]
+
+# check if an individual row in extra_rows is in vis_meta, see if they're actually duplicates
+dup1 <- vis_meta[vis_meta$Var1 == 'reshist_addr2_pm25_2016_annual_avg' & vis_meta$Var2 == 'reshist_addr2_adi_edu_h',] # yes, there are duplicates
+
+# remove duplicates
+vis_meta <- vis_meta[!duplicated(t(apply(vis_meta[c("Var1", "Var2")], 1, sort))), ]
+
+# repeat the same for Var2
+colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="Aliases"
+
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
+# rename cols
+vis_meta <- vis_meta %>% 
+  rename("Var2_Alias_tablename" = "table_name",
+         "Var2_Alias_description" = "ElementDescription",
+         "Var2_Alias_notes" = "Notes",
+         "Var2" = "Aliases")
+
+# find rows in test that are not in vis_meta
+extra_rows <- vis_meta[duplicated(vis_meta[,c("Var1", "Var2")]),]
+
+# check if an individual row in extra_rows is in vis_meta, see if they're actually duplicates
+dup1 <- vis_meta[vis_meta$Var1 == 'reshist_addr2_pm25_2016_annual_avg' & vis_meta$Var2 == 'reshist_addr2_adi_edu_h',] # yes, there are duplicates
+
+# remove duplicates
+vis_meta <- vis_meta[!duplicated(t(apply(vis_meta[c("Var1", "Var2")], 1, sort))), ]
+
+# ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
+
+
+
+
+
+
+
+
+
+
+
+
+
+test1 <- aggregate(Var1_description ~., test, toString)
+# ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
+
+
+
+
+
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
 # rename cols so they correspond to the right variable
-vis <- vis %>% rename("Var1_Alias_tablename" = "table_name",
+vis_meta <- vis_meta %>% rename("Var1_Alias_tablename" = "table_name",
                       "Var1_Alias_description" = "ElementDescription",
                       "Var1_Alias_notes" = "Notes",
                       "Var1_Alias" = "Aliases")
 
 # repeat for Var2
-colnames(vis)[colnames(vis) == "Var2"] ="Aliases"
-vis <- vis %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
+colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="Aliases"
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
 # rename cols so they correspond to the right variable
-vis <- vis %>% rename("Var2_Alias_tablename" = "table_name",
+vis_meta <- vis_meta %>% rename("Var2_Alias_tablename" = "table_name",
                       "Var2_Alias_description" = "ElementDescription",
                       "Var2_Alias_notes" = "Notes",
                       "Var2_Alias" = "Aliases")
@@ -477,42 +543,10 @@ vis <- vis %>% rename("Var2_Alias_tablename" = "table_name",
 
 
 
-
-
-colnames(temp_dict)[colnames(temp_dict) == "ElementName"] ="Var1"
-vis <- vis %>% left_join(temp_dict, by=c("row"))
-colnames(vis)[colnames(vis) == "ElementDescription"] ="row_description"
-
-# conduct mapping for "column" column
-colnames(temp_dict)[colnames(temp_dict) == "row"] ="column"
-vis <- vis %>% left_join(temp_dict, by=c("column"))
-colnames(vis)[colnames(vis) == "ElementDescription"] ="column_description"
-
-# add the TABLE names to the vis table for better clarity about what the columns mean
-temp_dict <- subset(abcd_dict, select=c("table_name", "ElementName"))
-colnames(temp_dict)[colnames(temp_dict) == "ElementName"] ="row"
-vis <- vis %>% left_join(temp_dict, by=c("row"))
-colnames(vis)[colnames(vis) == "table_name"] ="row_table_name"
-
-colnames(temp_dict)[colnames(temp_dict) == "row"] ="column"
-vis <- vis %>% left_join(temp_dict, by=c("column"))
-colnames(vis)[colnames(vis) == "table_name"] ="col_table_name"
-
-# add the TABLE descriptions to the vis table for better clarity about what the columns mean
-colnames(vis)[colnames(vis) == "row_table_name"] ="table_name"
-vis <- vis %>% left_join(table_details, by=c("table_name"))
-colnames(vis)[colnames(vis) == "table_name"] ="row_table_name"
-colnames(vis)[colnames(vis) == "table_description"] ="row_table_des"
-
-colnames(vis)[colnames(vis) == "col_table_name"] ="table_name"
-vis <- vis %>% left_join(table_details, by=c("table_name"))
-colnames(vis)[colnames(vis) == "table_name"] ="col_table_name"
-colnames(vis)[colnames(vis) == "table_description"] ="col_table_des"
-
-# add the TABLE descriptions to the vis table for better clarity about what the columns mean
+# add the TABLE descriptions to the vis_meta table for better clarity about what the columns mean
 # write all of the various correlation tables to a CSV to open in Cytoscape as a network
-write.csv(vis,
-          file='abcd_spearman_corr_all.csv',
+write.csv(vis_meta,
+          file='correlations_with_Alias_metadata.csv',
           row.names=FALSE)
 
 
