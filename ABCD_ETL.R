@@ -209,7 +209,9 @@ p_histo <- hist(vis_sub$neg_log_p_val,breaks=60)
 # let's capture all correlations between any 2 variables not in the same table
 vis$Var1_sub <- sub("\\_.*", "", vis$Var1)
 vis$Var2_sub <- sub("\\_.*", "", vis$Var2)
-vis_dtab <- vis[which(vis$Var1_sub != vis$Var2_sub),]
+vis_dtab <- vis[which(vis$Var1_sub != vis$Var2_sub),] # table of different-table correlations
+vis <- subset(vis, select = -c(Var1_sub, Var2_sub)) # delete 2 columns used to separate correlations pairs where each of the pair is from a different table
+
 
 # plot distribution of correlation values
 corr_histo_data <- hist(vis$cor, plot=F) # just to see counts per bin, etc
@@ -503,53 +505,95 @@ vis_meta <- vis_meta[!duplicated(t(apply(vis_meta[c("Var1", "Var2")], 1, sort)))
 
 # ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
 
+# now attach table descriptions to the tablenames...there are 4 "table_names" columns
+# they are: Var1_tablename, Var1_Alias_tablename, Var2_tablename, and Var2_Alias_tablename
+# so match table descriptions on all of these columns
+
+# doing for Var1_tablename column
+colnames(vis_meta)[colnames(vis_meta) == "Var1_tablename"] ="table_name"
+vis_meta <- vis_meta %>% left_join(table_details, by="table_name")
+# rename cols
+vis_meta <- vis_meta %>% 
+  rename("Var1_tablename" = "table_name",
+         "Var1_table_description" = "table_description")
+
+# doing for Var2_tablename column
+colnames(vis_meta)[colnames(vis_meta) == "Var2_tablename"] ="table_name"
+vis_meta <- vis_meta %>% left_join(table_details, by="table_name")
+# rename cols
+vis_meta <- vis_meta %>% 
+  rename("Var2_tablename" = "table_name",
+         "Var2_table_description" = "table_description")
+
+# doing for Var1_Alias_tablename column
+colnames(vis_meta)[colnames(vis_meta) == "Var1_Alias_tablename"] ="table_name"
+vis_meta <- vis_meta %>% left_join(table_details, by="table_name")
+# rename cols
+vis_meta <- vis_meta %>% 
+  rename("Var1_Alias_tablename" = "table_name",
+         "Var1_Alias_table_description" = "table_description")
+
+# doing for Var2_Alias_tablename column
+colnames(vis_meta)[colnames(vis_meta) == "Var2_Alias_tablename"] ="table_name"
+vis_meta <- vis_meta %>% left_join(table_details, by="table_name")
+# rename cols
+vis_meta <- vis_meta %>% 
+  rename("Var2_Alias_tablename" = "table_name",
+         "Var2_Alias_table_description" = "table_description")
+
+# make the final dataframe simpler by combining information in Alias and ABCD dictionary columns
+# if the ABCD_dictionary column is empty or NA for any tablename or column description or table description, fill it in with the corresponding Alias information, drop the Alias columns and just make 1 generic column holding info
+
+# DOING VAR1
+vis_meta$Var1_tablename <- ifelse(vis_meta$Var1_tablename == '' | is.na(vis_meta$Var1_tablename),
+                                  vis_meta$Var1_Alias_tablename, vis_meta$Var1_tablename)
+vis_meta <- subset(vis_meta, select = -Var1_Alias_tablename)
+
+vis_meta$Var1_description <- ifelse(vis_meta$Var1_description == '' | is.na(vis_meta$Var1_description),
+                                   vis_meta$Var1_Alias_description, vis_meta$Var1_description)
+vis_meta <- subset(vis_meta, select = -Var1_Alias_description)
+
+vis_meta$Var1_notes <- ifelse(vis_meta$Var1_notes == '' | is.na(vis_meta$Var1_notes),
+                                    vis_meta$Var1_Alias_notes, vis_meta$Var1_notes)
+vis_meta <- subset(vis_meta, select = -Var1_Alias_notes)
+
+vis_meta$Var1_table_description <- ifelse(vis_meta$Var1_table_description == '' | is.na(vis_meta$Var1_table_description),
+                              vis_meta$Var1_Alias_table_description, vis_meta$Var1_table_description)
+vis_meta <- subset(vis_meta, select = -Var1_Alias_table_description)
+
+# REPEAT FOR VAR2
+vis_meta$Var2_tablename <- ifelse(vis_meta$Var2_tablename == '' | is.na(vis_meta$Var2_tablename),
+                                  vis_meta$Var2_Alias_tablename, vis_meta$Var2_tablename)
+vis_meta <- subset(vis_meta, select = -Var2_Alias_tablename)
+
+vis_meta$Var2_description <- ifelse(vis_meta$Var2_description == '' | is.na(vis_meta$Var2_description),
+                                    vis_meta$Var2_Alias_description, vis_meta$Var2_description)
+vis_meta <- subset(vis_meta, select = -Var2_Alias_description)
+
+vis_meta$Var2_notes <- ifelse(vis_meta$Var2_notes == '' | is.na(vis_meta$Var2_notes),
+                              vis_meta$Var2_Alias_notes, vis_meta$Var2_notes)
+vis_meta <- subset(vis_meta, select = -Var2_Alias_notes)
+
+vis_meta$Var2_table_description <- ifelse(vis_meta$Var2_table_description == '' | is.na(vis_meta$Var2_table_description),
+                                          vis_meta$Var2_Alias_table_description, vis_meta$Var2_table_description)
+vis_meta <- subset(vis_meta, select = -Var2_Alias_table_description)
+
+# trim whitespace
+vis_meta <- vis_meta %>% mutate(across(where(is.character), str_trim))
 
 
 
-
-
-
-
-
-
-
-
-
-test1 <- aggregate(Var1_description ~., test, toString)
-# ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
-
-
-
-
-
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
-# rename cols so they correspond to the right variable
-vis_meta <- vis_meta %>% rename("Var1_Alias_tablename" = "table_name",
-                      "Var1_Alias_description" = "ElementDescription",
-                      "Var1_Alias_notes" = "Notes",
-                      "Var1_Alias" = "Aliases")
-
-# repeat for Var2
-colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="Aliases"
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
-# rename cols so they correspond to the right variable
-vis_meta <- vis_meta %>% rename("Var2_Alias_tablename" = "table_name",
-                      "Var2_Alias_description" = "ElementDescription",
-                      "Var2_Alias_notes" = "Notes",
-                      "Var2_Alias" = "Aliases")
-
-
-
-
-
-
-# add the TABLE descriptions to the vis_meta table for better clarity about what the columns mean
 # write all of the various correlation tables to a CSV to open in Cytoscape as a network
-write.csv(vis_meta,
-          file='correlations_with_Alias_metadata.csv',
-          row.names=FALSE)
+# write.csv(vis_meta,
+#           file='correlations_with_Alias_metadata.csv',
+#           row.names=FALSE)
 
-
+write.table(vis_meta, 'correlations_with_Alias_metadata.txt',
+            append = FALSE,
+            quote=FALSE,
+            sep = "\t",
+            dec = ".",
+            col.names = TRUE)
 
 
 #GOALS
