@@ -1,4 +1,5 @@
 # ETL of ABCD Data
+# note, this will generate KG of UNMAPPED ABCD data
 
 setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R')
 
@@ -581,8 +582,6 @@ vis_meta <- subset(vis_meta, select = -Var2_Alias_table_description)
 # trim whitespace
 vis_meta <- vis_meta %>% mutate(across(where(is.character), str_trim))
 
-
-
 # write all of the various correlation tables to a CSV to open in Cytoscape as a network
 # write.csv(vis_meta,
 #           file='correlations_with_Alias_metadata.csv',
@@ -594,6 +593,55 @@ write.table(vis_meta, 'correlations_with_Alias_metadata.txt',
             sep = "\t",
             dec = ".",
             col.names = TRUE)
+
+# make vis_meta dataframe into edges dataframe
+# subject, predicate, object, subject_name, object_name, category, attributes
+edges <- vis_meta %>% rename("subject" = "Var1",
+                             "object" = "Var2",
+                             "subject_name" = "Var1_description",
+                             "object_name" = "Var2_description", 
+                             "subject_table_name" = "Var1_tablename",
+                             "object_table_name" = "Var2_tablename",
+                             "subject_table_description" = "Var1_table_description", 
+                             "object_table_description" = "Var2_table_description",
+                             "subject_notes" = "Var1_notes",
+                             "object_notes" =  "Var2_notes"
+                             )
+
+edges$predicate <- "biolink:correlated_with"
+edges$category <- "biolink:SocioeconomicExposure"
+
+# make edges dataframe into nodes dataframe
+nodes1 <- edges %>% distinct(subject, subject_name) %>% rename("id" = "subject", "name" = "subject_name")
+nodes2 <- edges %>% distinct(object, object_name) %>% rename("id" = "object", "name" = "object_name")
+nodes <- rbind(nodes1, nodes2)
+rm(nodes1, nodes2)
+nodes <- nodes[!duplicated(nodes[ , "id"]), ]
+nodes$category <- "biolink:SocioeconomicExposure"
+
+# make edges file
+write.table(edges, 'ABCD_numerical_KG_edges.txt',
+            append = FALSE,
+            quote=FALSE,
+            row.names=FALSE,
+            sep = "\t",
+            dec = ".",
+            col.names = TRUE)
+
+# make nodes file
+write.table(edges, 'ABCD_numerical_KG_nodes.txt',
+            append = FALSE,
+            quote=FALSE,
+            row.names=FALSE,
+            sep = "\t",
+            dec = ".",
+            col.names = TRUE)
+
+
+
+
+
+
 
 
 #GOALS
