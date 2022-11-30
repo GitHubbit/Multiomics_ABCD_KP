@@ -121,21 +121,17 @@ dtype_cols <- cbind(dtype_cols, values)
 # first get all integer cols and see if can run correlations on that
 table(sapply(numerical_kg,class)) # check that only first 3 columns are factor (subject id, ndar id, and eventname)
 
-no_subject_id_kg <- numerical_kg[!names(numerical_kg) %in% c("subjectid", "src_subject_id", "eventname")]
-
 # get columns where the total number of observations exceeds 10 
 filtering <- data.frame(colSums(numerical_kg != 0, na.rm=TRUE)) 
-# filtering$cols <- rownames(filtering)
-# rownames(filtering) <- NULL
+
 filtering$check = ifelse(filtering$colSums.numerical_kg....0..na.rm...TRUE. > 10,TRUE,FALSE)
 filtering <- filter(filtering, check == TRUE)
 filtering <- t(filtering)
 numerical_kg_clean <- numerical_kg[colnames(numerical_kg) %in% colnames(filtering)]
 
 # conduct Shapiro-wilk's test for normality on each column (won't work, we have >5000 observations for many cols)
-# num_kg <- data.frame(sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric)) # force all cols to numeric
+# for now, proceed with doing Spearman correlations on all columns
 num_kg <- sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric) # force all cols to numeric
-
 
 # tack the first 3 cols of metadata back on
 numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
@@ -143,11 +139,9 @@ numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
                             numerical_kg_clean$eventname,
                             num_kg)
 
-values_count_per_col <- data.frame(colSums(num_kg !=0, na.rm=TRUE)) # get count of nonzero and non-na values in each column
+# values_count_per_col <- data.frame(colSums(num_kg !=0, na.rm=TRUE)) # get count of nonzero and non-na values in each column
 
-# test for normality of data. Can't perform shapiro wilk bc size has to be btw 3-5000. 
-# apply(num_kg,2,shapiro.test)
-
+# get correlation matrix
 corr_mat <- rcorr(num_kg, type="spearman")
 corr_mat$r[corr_mat$n < 10] <- NA # ignore less than 10 observations
 corr_mat$adj_p <- matrix(p.adjust(corr_mat$P, method="BH"), ncol = ncol(corr_mat$P), dimnames = dimnames(corr_mat$r))
@@ -207,28 +201,21 @@ p_histo
 vis_sub <- subset(vis, adj_p<0.01778379)
 p_histo <- hist(vis_sub$neg_log_p_val,breaks=60) 
 
-# let's capture all correlations between any 2 variables not in the same table
-vis$Var1_sub <- sub("\\_.*", "", vis$Var1)
-vis$Var2_sub <- sub("\\_.*", "", vis$Var2)
-vis_dtab <- vis[which(vis$Var1_sub != vis$Var2_sub),] # table of different-table correlations
-vis <- subset(vis, select = -c(Var1_sub, Var2_sub)) # delete 2 columns used to separate correlations pairs where each of the pair is from a different table
-
-
 # plot distribution of correlation values
 corr_histo_data <- hist(vis$cor, plot=F) # just to see counts per bin, etc
 hist.data$counts
-
 
 corr_histo <- ggplot(vis, aes(x=cor, y=log(..count..))) +
   geom_histogram(color="black", fill="red", binwidth = 0.1) +
   scale_y_continuous(breaks=seq(0,10,0.5)) +
   scale_x_continuous(breaks = seq(-1, 1, 0.1))
+# corr_histo
 
 n_hist <- ggplot(vis, aes(x=n, y=log(..count..))) +
   geom_histogram(color="black", fill="red", binwidth=10) +
   # scale_y_continuous(breaks=seq(0,8000,500)) +
   scale_x_continuous(breaks = seq(0, 12000, 1000))
-n_hist
+# n_hist
   
 # scatterplot of adj-p val vs Correlation
 ggplot(vis, aes(x=adj_p, y=cor, color=n)) + 
@@ -247,10 +234,6 @@ ggplot(vis, aes(x=-log(adj_p), y=cor, color=n)) +
   scale_y_continuous(breaks = seq(-1, 1, 0.1)) +
   scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000))
 
-# write all of the various correlation tables to a CSV to open in Cytoscape as a network
-write.csv(vis_dtab,
-          file='abcd_spearman_corr.csv',
-          row.names=FALSE)
 
 # we need the descriptions of the tables bc the data dictionary isn't informative enough about what the column names/nodes in network mean
 # web scrape the NIMH (https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL) data dictionary table descriptions to get better understanding of what column means
@@ -582,11 +565,6 @@ vis_meta <- subset(vis_meta, select = -Var2_Alias_table_description)
 # trim whitespace
 vis_meta <- vis_meta %>% mutate(across(where(is.character), str_trim))
 
-# write all of the various correlation tables to a CSV to open in Cytoscape as a network
-# write.csv(vis_meta,
-#           file='correlations_with_Alias_metadata.csv',
-#           row.names=FALSE)
-
 write.table(vis_meta, 'correlations_with_Alias_metadata.txt',
             append = FALSE,
             quote=FALSE,
@@ -629,7 +607,7 @@ write.table(edges, 'ABCD_numerical_KG_edges.txt',
             col.names = TRUE)
 
 # make nodes file
-write.table(edges, 'ABCD_numerical_KG_nodes.txt',
+write.table(nodes, 'ABCD_numerical_KG_nodes.txt',
             append = FALSE,
             quote=FALSE,
             row.names=FALSE,
@@ -637,13 +615,9 @@ write.table(edges, 'ABCD_numerical_KG_nodes.txt',
             dec = ".",
             col.names = TRUE)
 
-
-
-
-
-
-
-
-#GOALS
-OUTPUT FILE THAT HAS TABLES AND DESCRIPTIONS
-OUTPUT ROWS AND EDGES TSVS
+# capture correlations that are not in the same table (i.g. correlations between Table 1 and any other table besides Table 1, and so on...)
+edges_dtab <- edges[which(edges$subject_table_name != edges$object_table_name),] # table of different-table correlations
+# write all of the various correlation tables to a CSV to open in Cytoscape as a network
+write.csv(edges_dtab,
+          file='ABCD_correlations_inter_table.csv',
+          row.names=FALSE)
