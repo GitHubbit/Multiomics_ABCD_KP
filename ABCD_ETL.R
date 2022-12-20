@@ -20,10 +20,10 @@ librarian::shelf("data.table", "R.utils", "tidyverse",
 # abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds") # comment for hypatia
 abcd3 <- readRDS(file.path(data_rds))  # comment for local
 
-unique(abcd_sub$event_name) # see what types eventnames there are (there are baseline, 1 year 6 month, etc readings)
-
 # get only baseline readings
 abcd_baseline <- abcd3[abcd3$eventname %like% "baseline", ]
+
+unique(abcd_baseline$event_name) # see what types eventnames there are (there are baseline, 1 year 6 month, etc readings)
 
 # get a subset of data easier to work with (get only baseline readings)
 # abcd_sub <- abcd_baseline[1:5000,]
@@ -49,6 +49,12 @@ abcd_dict <- rbindlist(abcd_dict, fill=T)
 # output dataframe of all cols in dataset to file to see
 # write.csv(abcd_dict,"../outputs/abcd_cols.csv", row.names = FALSE)
 
+# see if there are duplicate columns in the abcd_dict by getting the counts of each column
+dict_colname_count <- data.frame(table(abcd_dict$ElementName))
+dict_colname_count <- dict_colname_count[order(dict_colname_count$Freq, decreasing = TRUE), ]
+write.table(dict_colname_count,"../outputs/abcd_dict_colname_counts.txt", row.names = FALSE, quote=FALSE, sep="\t")
+
+
 types_in_df <- data.frame(sapply(abcd_sub, class))  # get the types of all the columns in the abcd dataset
 # grab columns of relevance 
 selected_cols <-  abcd_dict %>% filter(DataType == "Float" |
@@ -67,7 +73,7 @@ selected_cols <-  abcd_dict %>% filter(DataType == "Float" |
                                        
                                        # table_name == "abcd_yrb01" & grepl("how many", ElementDescription) |
                                        # table_name == "abcd_ysr01" & grepl("how many", ElementDescription) 
-                                       )
+)
 
 # filter out MRI and other variables that are not float/numerical
 selected_cols <- selected_cols %>% filter(!grepl("mri|ehi_y_ss_scoreb|rep1|rep2|rep3|hair_results_lan|hair_results_entityid|hair_results_clientcode|hair_results_section_begin|hair_results_section_end|_nt$|_nm$", ElementName))
@@ -141,6 +147,11 @@ numerical_kg_clean <- numerical_kg[colnames(numerical_kg) %in% colnames(filterin
 # for now, proceed with doing Spearman correlations on all columns
 num_kg <- sapply(numerical_kg_clean[, 4:ncol(numerical_kg_clean)], as.numeric) # force all cols to numeric
 
+# see if there are duplicate columns in the abcd data that we conduct correlation analysis on by getting the counts of each column
+abcd_data_colname_count <- data.frame(table(colnames(num_kg)))
+abcd_data_colname_count <- abcd_data_colname_count[order(abcd_data_colname_count$Freq, decreasing = TRUE), ]
+write.table(abcd_data_colname_count,"../outputs/abcd_data_colname_counts.txt", row.names = FALSE, quote=FALSE, sep="\t")
+
 # tack the first 3 cols of metadata back on
 numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
                             numerical_kg_clean$src_subject_id,
@@ -202,7 +213,8 @@ vis <- vis[order(vis$adj_p, vis$cor),]
 vis["neg_log_p_val"] <- data.frame(-log10(vis$adj_p))
 
 p_histo <- hist(vis$neg_log_p_val,breaks=60) 
-p_histo
+# p_histo
+
 # from plot, -log(p-val)=1.75 on x-axis = endpoint of first 2 bars
 # x or adjusted p-val = 0.01778279
 # let's capture all adj p-vals that are < 0.01778379
@@ -224,14 +236,15 @@ n_hist <- ggplot(vis, aes(x=n, y=log(..count..))) +
   # scale_y_continuous(breaks=seq(0,8000,500)) +
   scale_x_continuous(breaks = seq(0, 12000, 1000))
 # n_hist
-  
+
 # scatterplot of adj-p val vs Correlation
 ggplot(vis, aes(x=adj_p, y=corr, color=n)) + 
   geom_point(size=3) +
   ggtitle("Scatterplot Adj p-val vs Corr") +
   scale_x_continuous(breaks = seq(0, 0.05, 0.005)) +
   scale_y_continuous(breaks = seq(-1, 1, 0.1)) +
-  scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000))
+  scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000)) +
+  coord_flip()
 
 # scatterplot of -log(adj-p val) vs Correlation
 ggplot(vis, aes(x=-log(adj_p), y=corr, color=n)) + 
@@ -239,7 +252,8 @@ ggplot(vis, aes(x=-log(adj_p), y=corr, color=n)) +
   ggtitle("Scatterplot -log(Adj p-val) vs Corr") +
   scale_x_continuous(breaks = seq(0, 50, 5)) +
   scale_y_continuous(breaks = seq(-1, 1, 0.1)) +
-  scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000))
+  scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000)) +
+  coord_flip()
 
 
 # we need the descriptions of the tables bc the data dictionary isn't informative enough about what the column names/nodes in network mean
@@ -293,7 +307,7 @@ if (file.exists(file.path("..", sub_dir))){
   # specifying the working directory
   cat("ABCD tables appear to have been downloaded already")
   setwd(script_dir)
-
+  
 } else {
   # create a new sub directory inside
   # the main path
@@ -311,7 +325,7 @@ extract_table_des <- function(html_file) {
   table_des <- html_pg %>% html_elements("div.ds-main-properties") %>% html_element("span")  %>% html_text() # get the table description
   table_info <- c(table_name, table_des)
   return(table_info)
-
+  
 }
 
 # run extract_table_des function to scrape all table descriptions on folder of downloaded ABCD tables (.html files), dump into dataframe called tabled_details
@@ -450,23 +464,25 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
 # abcd_dict[abcd_dict$ElementName == 'sex',]
 
 
-# NOW add the column descriptions and table names
+# NOW add the column descriptions 
 vis_meta <- vis
 colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="ElementName"
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes")], by="ElementName")
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
 # rename cols so they correspond to the right variable
 vis_meta <- vis_meta %>% rename("Var1_tablename" = "table_name",
-                      "Var1_description" = "ElementDescription",
-                      "Var1_notes" = "Notes",
-                      "Var1" = "ElementName")
+                                "Var1_description" = "ElementDescription",
+                                "Var1_notes" = "Notes",
+                                "Var1" = "ElementName",
+                                "Var1_DataType" = "DataType")
 # repeat for Var2
 colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="ElementName"
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes")], by="ElementName")
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
 # rename cols so they correspond to the right variable
 vis_meta <- vis_meta %>% rename("Var2_tablename" = "table_name",
-                      "Var2_description" = "ElementDescription",
-                      "Var2_notes" = "Notes",
-                      "Var2" = "ElementName")
+                                "Var2_description" = "ElementDescription",
+                                "Var2_notes" = "Notes",
+                                "Var2" = "ElementName",
+                                "Var2_DataType" = "DataType")
 
 
 # some column and table descriptions did not get added because the column name is actually in the Aliases column
@@ -478,46 +494,127 @@ vis_meta <- vis_meta %>% rename("Var2_tablename" = "table_name",
 # JOIN BY ELEMENT DESCRIPTION AND TABLE NAME (when this is done, the KG blows up bc there is a column (interview_age) of same name in multiple tables)
 # for clarity, see code between star dashes below
 # ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
+
+# FIND ALIASES WITH DATATYPE FLOAT, FILTER OUT VARIABLES THAT AREN'T FLOAT FROM THE DUPLICATES
+
 colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="Aliases"
 
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes", "DataType")], by="Aliases")
 # rename cols
 vis_meta <- vis_meta %>% 
   rename("Var1_Alias_tablename" = "table_name",
          "Var1_Alias_description" = "ElementDescription",
          "Var1_Alias_notes" = "Notes",
-         "Var1" = "Aliases")
+         "Var1" = "Aliases",
+         "Var1_Alias_DataType" = "DataType")
 
-# find rows in test that are not in vis_meta
-extra_rows <- vis_meta[duplicated(vis_meta[,c("Var1", "Var2")]),]
+# find duplicate rows
+extra_rows <- vis_meta[duplicated(vis_meta[,c("Var1", "Var2")],) | duplicated(vis_meta[,c("Var1", "Var2")], fromLast=TRUE),]
 
 # check if an individual row in extra_rows is in vis_meta, see if they're actually duplicates
 dup1 <- vis_meta[vis_meta$Var1 == 'reshist_addr2_pm25_2016_annual_avg' & vis_meta$Var2 == 'reshist_addr2_adi_edu_h',] # yes, there are duplicates
 
 # remove duplicates
-vis_meta <- vis_meta[!duplicated(t(apply(vis_meta[c("Var1", "Var2")], 1, sort))), ]
+# ##vis_meta <- vis_meta[!duplicated(t(apply(vis_meta[c("Var1", "Var2")], 1, sort))), ]
+# the above removes duplicates arbitrarily, bc the other columns besides Var1 and Var2 have different info for the same correlation pair bc of the Aliases col
+# Gustavo: remove the duplicates where the DataType is not a float
+extra_rows_float <- extra_rows[extra_rows$Var1_DataType == 'Float',]
 
 # repeat the same for Var2
 colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="Aliases"
 
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes")], by="Aliases")
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes", "DataType")], by="Aliases")
 # rename cols
 vis_meta <- vis_meta %>% 
   rename("Var2_Alias_tablename" = "table_name",
          "Var2_Alias_description" = "ElementDescription",
          "Var2_Alias_notes" = "Notes",
-         "Var2" = "Aliases")
+         "Var2" = "Aliases",
+         "Var2_Alias_DataType" = "DataType")
 
-# find rows in test that are not in vis_meta
-extra_rows <- vis_meta[duplicated(vis_meta[,c("Var1", "Var2")]),]
+# find duplicated rows in vis_meta
+extra_rows <- vis_meta[duplicated(vis_meta[,c("Var1", "Var2")],) | duplicated(vis_meta[,c("Var1", "Var2")], fromLast=TRUE),]
 
 # check if an individual row in extra_rows is in vis_meta, see if they're actually duplicates
 dup1 <- vis_meta[vis_meta$Var1 == 'reshist_addr2_pm25_2016_annual_avg' & vis_meta$Var2 == 'reshist_addr2_adi_edu_h',] # yes, there are duplicates
 
-# remove duplicates
-vis_meta <- vis_meta[!duplicated(t(apply(vis_meta[c("Var1", "Var2")], 1, sort))), ]
+# reorder to see Var1 and Var 2 datatypes next to each other
+col_order <- c("Var1", "Var2", "Var1_DataType", "Var1_Alias_DataType", "Var2_DataType", "Var2_Alias_DataType")
+Var_Alias_DataTypes <- vis_meta[, c("Var1", "Var2", "Var1_DataType", "Var1_Alias_DataType", "Var2_DataType", "Var2_Alias_DataType")]
+dups <- Var_Alias_DataTypes[duplicated(Var_Alias_DataTypes[,c(1,2)]) | duplicated(Var_Alias_DataTypes[,c(1,2)], fromLast=TRUE), ]
+
+write.table(dups, '../outputs/ordered_duplicates.txt',
+            append = FALSE,
+            quote=FALSE,
+            sep = "\t",
+            dec = ".",
+            col.names = TRUE)
+
+# all of the types added from Alias column are String though!
+# the ordered duplicates file shows that two variable names are very common, find how many times they occur in each row
+
+dups$rehist_counts <- apply(dups, 1, function(x) length(which(x=="reshist_addr2_pm25_2016_annual_avg" | x=="reshist_addr3_pm25_2016_annual_avg"))) # check how many rows contain "reshist_addr2_pm25_2016_annual_avg" or "reshist_addr3_pm25_2016_annual_avg"
+sum(dups$rehist_counts != 0) # all rows have either "reshist_addr2_pm25_2016_annual_avg" or "reshist_addr3_pm25_2016_annual_avg"                        
+
+incorrect_Alias_check <- abcd_dict[grepl("reshist_addr2_pm25_2016_annual_avg", abcd_dict$Aliases), ] # to see incorrect Alias designation
+incorrect_Alias_check <- abcd_dict[grepl("reshist_addr3_pm25_2016_annual_avg", abcd_dict$Aliases), ] # to see incorrect Alias designation
+# the data dictionary has incorrectly listed "reshist_addr2_pm25_2016_annual_avg" and "reshist_addr3_pm25_2016_annual_avg" as Aliases in the "abcd_tbss01" table
+# remove them from data dictionary and re-run analysis
+abcd_dict <-  abcd_dict %>% filter(!(table_name == "abcd_tbss01" & grepl("reshist_addr2_pm25_2016_annual_avg|reshist_addr3_pm25_2016_annual_avg", Aliases))) 
+# ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
 
 # ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
+
+
+# -------------------   RE-RUN GENERATION OF JOINING METADATA TO VIS DF USING NEW ABCD_DICT  ------------------- #
+
+# NOW add the column descriptions 
+vis_meta <- vis
+colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="ElementName"
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
+# rename cols so they correspond to the right variable
+vis_meta <- vis_meta %>% rename("Var1_tablename" = "table_name",
+                                "Var1_description" = "ElementDescription",
+                                "Var1_notes" = "Notes",
+                                "Var1" = "ElementName",
+                                "Var1_DataType" = "DataType")
+# repeat for Var2
+colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="ElementName"
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
+# rename cols so they correspond to the right variable
+vis_meta <- vis_meta %>% rename("Var2_tablename" = "table_name",
+                                "Var2_description" = "ElementDescription",
+                                "Var2_notes" = "Notes",
+                                "Var2" = "ElementName",
+                                "Var2_DataType" = "DataType")
+
+
+# some column and table descriptions did not get added because the column name is actually in the Aliases column
+# join on Aliases to grab those tables and descriptions
+# add the column descriptions and table names again, this time by trying to find the names in Aliases
+
+colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="Aliases"
+
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes", "DataType")], by="Aliases")
+# rename cols
+vis_meta <- vis_meta %>% 
+  rename("Var1_Alias_tablename" = "table_name",
+         "Var1_Alias_description" = "ElementDescription",
+         "Var1_Alias_notes" = "Notes",
+         "Var1" = "Aliases",
+         "Var1_Alias_DataType" = "DataType")
+
+# repeat the same for Var2
+colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="Aliases"
+
+vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes", "DataType")], by="Aliases")
+# rename cols
+vis_meta <- vis_meta %>% 
+  rename("Var2_Alias_tablename" = "table_name",
+         "Var2_Alias_description" = "ElementDescription",
+         "Var2_Alias_notes" = "Notes",
+         "Var2" = "Aliases",
+         "Var2_Alias_DataType" = "DataType")
 
 # now attach table descriptions to the tablenames...there are 4 "table_names" columns
 # they are: Var1_tablename, Var1_Alias_tablename, Var2_tablename, and Var2_Alias_tablename
@@ -564,16 +661,20 @@ vis_meta$Var1_tablename <- ifelse(vis_meta$Var1_tablename == '' | is.na(vis_meta
 vis_meta <- subset(vis_meta, select = -Var1_Alias_tablename)
 
 vis_meta$Var1_description <- ifelse(vis_meta$Var1_description == '' | is.na(vis_meta$Var1_description),
-                                   vis_meta$Var1_Alias_description, vis_meta$Var1_description)
+                                    vis_meta$Var1_Alias_description, vis_meta$Var1_description)
 vis_meta <- subset(vis_meta, select = -Var1_Alias_description)
 
 vis_meta$Var1_notes <- ifelse(vis_meta$Var1_notes == '' | is.na(vis_meta$Var1_notes),
-                                    vis_meta$Var1_Alias_notes, vis_meta$Var1_notes)
+                              vis_meta$Var1_Alias_notes, vis_meta$Var1_notes)
 vis_meta <- subset(vis_meta, select = -Var1_Alias_notes)
 
 vis_meta$Var1_table_description <- ifelse(vis_meta$Var1_table_description == '' | is.na(vis_meta$Var1_table_description),
-                              vis_meta$Var1_Alias_table_description, vis_meta$Var1_table_description)
+                                          vis_meta$Var1_Alias_table_description, vis_meta$Var1_table_description)
 vis_meta <- subset(vis_meta, select = -Var1_Alias_table_description)
+
+vis_meta$Var1_DataType <- ifelse(vis_meta$Var1_DataType == '' | is.na(vis_meta$Var1_DataType),
+                                 vis_meta$Var1_Alias_DataType, vis_meta$Var1_DataType)
+vis_meta <- subset(vis_meta, select = -Var1_Alias_DataType)
 
 # REPEAT FOR VAR2
 vis_meta$Var2_tablename <- ifelse(vis_meta$Var2_tablename == '' | is.na(vis_meta$Var2_tablename),
@@ -591,6 +692,10 @@ vis_meta <- subset(vis_meta, select = -Var2_Alias_notes)
 vis_meta$Var2_table_description <- ifelse(vis_meta$Var2_table_description == '' | is.na(vis_meta$Var2_table_description),
                                           vis_meta$Var2_Alias_table_description, vis_meta$Var2_table_description)
 vis_meta <- subset(vis_meta, select = -Var2_Alias_table_description)
+
+vis_meta$Var2_DataType <- ifelse(vis_meta$Var2_DataType == '' | is.na(vis_meta$Var2_DataType),
+                                 vis_meta$Var2_Alias_DataType, vis_meta$Var2_DataType)
+vis_meta <- subset(vis_meta, select = -Var2_Alias_DataType)
 
 # trim whitespace
 vis_meta <- vis_meta %>% mutate(across(where(is.character), str_trim))
@@ -623,31 +728,53 @@ if (file.exists(file.path("..", sub_dir))){
   setwd(script_dir)
 }
 
-
 # make vis_meta dataframe into edges dataframe
 # subject, predicate, object, subject_name, object_name, category, attributes
-edges <- vis_meta %>% rename("subject" = "Var1",
-                             "object" = "Var2",
-                             "subject_name" = "Var1_description",
-                             "object_name" = "Var2_description", 
-                             "subject_table_name" = "Var1_tablename",
-                             "object_table_name" = "Var2_tablename",
-                             "subject_table_description" = "Var1_table_description", 
-                             "object_table_description" = "Var2_table_description",
-                             "subject_notes" = "Var1_notes",
-                             "object_notes" =  "Var2_notes"
-                             )
-
+edges <- vis_meta[ , which(names(vis_meta) %in% c("Var1","Var2", "corr", "n", "p_val", "adj_p", "neg_log_p_val"))]
+edges <- edges %>% rename("subject" = "Var1", "object" = "Var2")
 edges$predicate <- "biolink:correlated_with"
 edges$category <- "biolink:SocioeconomicExposure"
+# re-order columns so that most important/required ones are first
+col_order <- c("subject", "predicate", "object", "corr", "p_val", "adj_p", "neg_log_p_val", "n")
+edges <- edges[, col_order]
 
-# make edges dataframe into nodes dataframe
-nodes1 <- edges %>% distinct(subject, subject_name) %>% rename("id" = "subject", "name" = "subject_name")
-nodes2 <- edges %>% distinct(object, object_name) %>% rename("id" = "object", "name" = "object_name")
+# make nodes dataframe
+nodes1 <- vis_meta[ , grepl( "Var1" , names(vis_meta))] %>% rename("name" = "Var1",
+                                                                   "tablename" = "Var1_tablename",
+                                                                   "description" = "Var1_description",
+                                                                   "notes" = "Var1_notes",
+                                                                   "table_description" = "Var1_table_description",
+                                                                   "datatype" = "Var1_DataType")
+nodes2 <- vis_meta[ , grepl( "Var2" , names(vis_meta))] %>% rename("name" = "Var2",
+                                                                   "tablename" = "Var2_tablename",
+                                                                   "description" = "Var2_description",
+                                                                   "notes" = "Var2_notes",
+                                                                   "table_description" = "Var2_table_description",
+                                                                   "datatype" = "Var2_DataType")
 nodes <- rbind(nodes1, nodes2)
+nodes <- nodes %>% distinct(name, tablename, description, notes, table_description) 
 rm(nodes1, nodes2)
-nodes <- nodes[!duplicated(nodes[ , "id"]), ]
+# add pseudo-ID column to nodes df. Temp ID is "ABCD_[Var name]", where Var name is one of the columns in the ABCD dataset 
+nodes$ID <- paste0("ABCD:", nodes$name)
+nodes$name <- NULL
+nodes <- nodes %>% rename("name" = "description")
+# re-order columns so that most important/required ones are first
+col_order <- c("ID", "name", "tablename", "table_description", "notes")
+nodes <- nodes[, col_order]
+nodes <- nodes[!duplicated(nodes[ , "ID"]), ] # should be redundant
 nodes$category <- "biolink:SocioeconomicExposure"
+
+# add pseudo-ID to edges table
+edges$subject_ID <- paste0("ABCD:", edges$subject)
+edges$object_ID <- paste0("ABCD:", edges$object)
+edges$subject <- NULL
+edges$object <- NULL
+# re-order columns so that most important/required ones are first
+col_order <- c("subject_ID", "predicate", "object_ID", "corr", "p_val", "adj_p", "neg_log_p_val", "n")
+edges <- edges[, col_order]
+edges <- edges %>% rename("subject" = "subject_ID",
+                          "object" = "object_ID")
+
 
 # capture correlations that are not in the same table (i.g. correlations between Table 1 and any other table besides Table 1, and so on...)
 edges_dtab <- edges[which(edges$subject_table_name != edges$object_table_name),] # table of different-table correlations
@@ -706,5 +833,3 @@ if (file.exists(file.path("..", sub_dir))){
             row.names=FALSE)
   setwd(script_dir)
 }
-
-
