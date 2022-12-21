@@ -775,7 +775,6 @@ edges <- edges[, col_order]
 edges <- edges %>% rename("subject" = "subject_ID",
                           "object" = "object_ID")
 
-
 # capture correlations that are not in the same table (i.g. correlations between Table 1 and any other table besides Table 1, and so on...)
 edges_dtab <- edges[which(edges$subject_table_name != edges$object_table_name),] # table of different-table correlations
 
