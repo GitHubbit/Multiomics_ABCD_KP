@@ -1,1 +1,7 @@
+.Rprofile
+.RDataTmp
+.DS_Store
+.Rhistory
+.Rprofile
 .Rproj.user/
+R.Rproj
