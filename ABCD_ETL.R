@@ -6,7 +6,8 @@ rm(list=ls())
 # setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R') # comment for hypatia
 script_dir <- getwd() # comment for local  # ---> SHOULD BE SET TO DIR THAT SCRIPT IS IN
 data_dir <- "data" # comment for local
-data_rds <- "../data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds" # comment for local
+# data_rds <- "../data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds" # uncomment for local
+data_rds <- "../data/ABCD_release_2.0_rds"
 ABCD_DEAP_2.0_dictionary <- "../data/ABCDstudyDEAP_2.0/dictionary" # comment for local
 deap_aliases_updated <- '../data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/DEAP.aliases.updated.2.0.1.csv' # comment for local
 
