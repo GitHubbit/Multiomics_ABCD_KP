@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 # ETL of ABCD Data
 # note, this will generate KG of UNMAPPED ABCD data
 rm(list=ls())
