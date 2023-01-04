@@ -467,6 +467,7 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
 
 
 # NOW add the column descriptions 
+# do for Var1
 vis_meta <- vis
 colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="ElementName"
 vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
@@ -553,7 +554,7 @@ write.table(dups, '../outputs/ordered_duplicates.txt',
             col.names = TRUE)
 
 # all of the types added from Alias column are String though!
-# the ordered duplicates file shows that two variable names are very common, find how many times they occur in each row
+# the ordered duplicates file shows that two variable names ("reshist_addr2_pm25_2016_annual_avg" and "reshist_addr3_pm25_2016_annual_avg") are very common, find how many times they occur in each row
 
 dups$rehist_counts <- apply(dups, 1, function(x) length(which(x=="reshist_addr2_pm25_2016_annual_avg" | x=="reshist_addr3_pm25_2016_annual_avg"))) # check how many rows contain "reshist_addr2_pm25_2016_annual_avg" or "reshist_addr3_pm25_2016_annual_avg"
 sum(dups$rehist_counts != 0) # all rows have either "reshist_addr2_pm25_2016_annual_avg" or "reshist_addr3_pm25_2016_annual_avg"                        
@@ -701,6 +702,25 @@ vis_meta <- subset(vis_meta, select = -Var2_Alias_DataType)
 
 # trim whitespace
 vis_meta <- vis_meta %>% mutate(across(where(is.character), str_trim))
+# remove newlines from dataframe
+remove_newlines <- function(col) {
+  # col <- ifelse(is.character(col)==TRUE, { gsub("[\r\n]", "", col) }, col)
+  # col <- ifelse(is.factor(col)==TRUE, { gsub("[\r\n]", "", col) }, col)
+  # col <- ifelse(is.character(col)==TRUE, { gsub("[\t]", ",", col) }, col)
+  # col <- ifelse(is.factor(col)==TRUE, { gsub("[\t]", ",", col) }, col)
+  col <- gsub("[\r\n]", "", col)
+  col <- gsub("[\n\n]", "", col)
+  col <- gsub("[\t]", ",", col)
+  return(col)
+}
+
+# test_string <- c("How many drinks (mg) did you have?
+# 
+#  RA: Please use the following link to determine total miligrams per serving size and open the link in new window:")
+# 
+# gsub("[\r\n]", "", test_string)
+
+vis_meta <- data.frame(lapply(vis_meta, function(x) sapply(x, remove_newlines)))
 
 # write correlations with metadata (table descriptions and column descriptions to output file)
 sub_dir <- "outputs"
@@ -834,4 +854,5 @@ if (file.exists(file.path("..", sub_dir))){
             row.names=FALSE)
   setwd(script_dir)
 }
+
 
