@@ -702,12 +702,8 @@ vis_meta <- subset(vis_meta, select = -Var2_Alias_DataType)
 
 # trim whitespace
 vis_meta <- vis_meta %>% mutate(across(where(is.character), str_trim))
-# remove newlines from dataframe
+# remove newlines and tabs from dataframe 
 remove_newlines <- function(col) {
-  # col <- ifelse(is.character(col)==TRUE, { gsub("[\r\n]", "", col) }, col)
-  # col <- ifelse(is.factor(col)==TRUE, { gsub("[\r\n]", "", col) }, col)
-  # col <- ifelse(is.character(col)==TRUE, { gsub("[\t]", ",", col) }, col)
-  # col <- ifelse(is.factor(col)==TRUE, { gsub("[\t]", ",", col) }, col)
   col <- gsub("[\r\n]", "", col)
   col <- gsub("[\n\n]", "", col)
   col <- gsub("[\t]", ",", col)
