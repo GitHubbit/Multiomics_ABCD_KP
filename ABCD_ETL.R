@@ -5,9 +5,7 @@ rm(list=ls())
 
 # setwd('/Users/Kamileh/Work/ISB/NCATS_BiomedicalTranslator/Projects/ABCD/scripts/R') # comment for hypatia
 script_dir <- getwd() # comment for local  # ---> SHOULD BE SET TO DIR THAT SCRIPT IS IN
-data_dir <- "data" # comment for local
 data_rds <- "../data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds" # uncomment for local
-# data_rds <- "../data/ABCD_release_2.0_rds"
 ABCD_DEAP_2.0_dictionary <- "../data/ABCDstudyDEAP_2.0/dictionary" # comment for local
 deap_aliases_updated <- '../data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/DEAP.aliases.updated.2.0.1.csv' # comment for local
 
@@ -16,7 +14,9 @@ librarian::shelf("data.table", "R.utils", "tidyverse",
                  "tidyr", "stringr", "tibble",
                  "corrplot", "Hmisc", "ggplot2",
                  "RColorBrewer", "rvest", "utils",
-                 "futile.logger", "renv")
+                 "futile.logger", "renv", "httr",
+                 "jsonlite", "curl", "magrittr",
+                 "stringi")
 
 # read in the RDS file
 # abcd3 <- readRDS("/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCD_release_2.0_rds/ABCD_releases_2.0.1_Rds/nda2.0.1.Rds") # comment for hypatia
@@ -33,9 +33,7 @@ abcd_sub <- abcd_baseline
 rm(abcd3, abcd_baseline) # remove big data, work with subset
 
 # retrieve data dictionary so we know what we're looking at 
-# dict_files <- list.files(path="/Volumes/TOSHIBA_EXT/ISB/ABCD/data/ABCDstudyDEAP_2.0/dictionary", pattern=".csv", full.names=T) # comment for hypatia
 dict_files <- list.files(path=ABCD_DEAP_2.0_dictionary, pattern=".csv", full.names=T) # comment for local
-
 
 parse_dict_file <- function(file) {
   return(tryCatch(read.csv(file) %>% add_column(table_name=sub('\\.csv$', '', basename(file)), .before=1), error=function(e) NULL))
@@ -48,16 +46,15 @@ cols_types <- unique(sapply(abcd_sub, typeof)) # there's only double and string
 
 abcd_dict <- lapply(dict_files, parse_dict_file)
 abcd_dict <- rbindlist(abcd_dict, fill=T)
-# output dataframe of all cols in dataset to file to see
+# output dataframe of all cols in dataset to file to see as spreadsheet output
 # write.csv(abcd_dict,"../outputs/abcd_cols.csv", row.names = FALSE)
 
 # see if there are duplicate columns in the abcd_dict by getting the counts of each column
 dict_colname_count <- data.frame(table(abcd_dict$ElementName))
 dict_colname_count <- dict_colname_count[order(dict_colname_count$Freq, decreasing = TRUE), ]
-write.table(dict_colname_count,"../outputs/abcd_dict_colname_counts.txt", row.names = FALSE, quote=FALSE, sep="\t")
+# write.table(dict_colname_count,"../outputs/abcd_dict_colname_counts.txt", row.names = FALSE, quote=FALSE, sep="\t")
 
-
-types_in_df <- data.frame(sapply(abcd_sub, class))  # get the types of all the columns in the abcd dataset
+# types_in_df <- data.frame(sapply(abcd_sub, class))  # get the types of all the columns in the abcd dataset
 # grab columns of relevance 
 selected_cols <-  abcd_dict %>% filter(DataType == "Float" |
                                          ElementName == "anthroheightcalc|anthroweightcalc" |
@@ -84,7 +81,6 @@ selected_cols <- selected_cols %>% filter(!grepl("mri", Aliases))
 selected_cols <- selected_cols %>% filter(!grepl(";", ValueRange))
 selected_cols <- selected_cols %>% filter(!grepl("Raw Score|Missing Answers|Total Questions", ElementDescription))
 
-
 # tack dhx01 back on 
 dhx01 <-  abcd_dict %>% filter(table_name == "dhx01" &
                                  !grepl("GUID|Date", DataType) &
@@ -102,17 +98,15 @@ medsy01 <-  abcd_dict %>% filter(table_name == "medsy01" &
 selected_cols <- rbind(selected_cols, medsy01)
 
 additional_desired_cols <- c("subjectid", "src_subject_id", "eventname")
-# split Alias column on comma
 
+# split Alias column on comma
 aliases <- data.frame(str_split(selected_cols$Aliases, ",", simplify=TRUE))
-aliases
 
 selected_cols_names_only <- c(additional_desired_cols, selected_cols$ElementName, selected_cols$Notes, selected_cols$Condition, selected_cols$Aliases, aliases$X1, aliases$X2)
 selected_cols_names_only <- unique(selected_cols_names_only[selected_cols_names_only != ""])
 
 initial_kg <- abcd_sub[,(names(abcd_sub) %in% selected_cols_names_only)]
 
-rm(dhx01, medsy01)
 
 # in our manual curation, we accidentally pulled some factor level columns that are genuinely factors, but there are some factor columns that aren't truly factors (these have factor level of 1)
 # grab factor level columns that have maximum of 1 level to keep in initial_kg, and the 1 age column
@@ -154,12 +148,6 @@ abcd_data_colname_count <- data.frame(table(colnames(num_kg)))
 abcd_data_colname_count <- abcd_data_colname_count[order(abcd_data_colname_count$Freq, decreasing = TRUE), ]
 write.table(abcd_data_colname_count,"../outputs/abcd_data_colname_counts.txt", row.names = FALSE, quote=FALSE, sep="\t")
 
-# tack the first 3 cols of metadata back on
-numerical_kg_clean <- cbind(numerical_kg_clean$subjectid,
-                            numerical_kg_clean$src_subject_id,
-                            numerical_kg_clean$eventname,
-                            num_kg)
-
 # values_count_per_col <- data.frame(colSums(num_kg !=0, na.rm=TRUE)) # get count of nonzero and non-na values in each column
 
 # get correlation matrix
@@ -196,7 +184,7 @@ pivoted_padj <- pivoted_padj[!is.na(pivoted_padj$adj_p),]
 # join all pivoted matrices 
 corr_info <- list(pivoted_r, pivoted_n, pivoted_p, pivoted_padj) %>% reduce(left_join, by=c("Var1","Var2"))
 corr_info <- corr_info[complete.cases(corr_info), ] #unnecessary
-rm(list = c("pivoted_padj","pivoted_p","pivoted_n","pivoted_r"))
+rm(list=setdiff(ls(), c("script_dir", "sub_dir", "abcd_dict", "num_kg", "abcd_sub", "corr_info")))
 
 # drop rows where adjusted p-val is <0.05 [optional: and r=1]
 vis <- corr_info[corr_info$adj_p < 0.05, ]
@@ -206,12 +194,11 @@ vis <- vis[vis$cor != 0, ]
 vis["adj_p"][vis["adj_p"] == 0] <- 1E-20
 
 vis <- vis[complete.cases(vis), ]
-# remove duplicate rows 
 
 # remove weakly correlated pairs (r between -0.5 and +0.5)
 # vis <- subset(vis, cor < -0.5 | cor > 0.5)
 
-vis <- vis[order(vis$adj_p, vis$cor),]
+vis <- vis[order(vis$adj_p, vis$cor),] # order by adj p-val
 vis["neg_log_p_val"] <- data.frame(-log10(vis$adj_p))
 
 p_histo <- hist(vis$neg_log_p_val,breaks=60) 
@@ -257,12 +244,19 @@ ggplot(vis, aes(x=-log(adj_p), y=corr, color=n)) +
   scale_color_gradientn(colors=colorRampPalette(brewer.pal(name="YlOrRd", n = 8))(12), breaks=seq(0,12000,1000)) +
   coord_flip()
 
-
 # we need the descriptions of the tables bc the data dictionary isn't informative enough about what the column names/nodes in network mean
 # web scrape the NIMH (https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL) data dictionary table descriptions to get better understanding of what column means
 setwd(script_dir)
-abcd_data_dict_2_url <- "https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL"
-download.file(abcd_data_dict_2_url, destfile = '../data/abcd_data_dict_2.html') # uncomment to scrape
+# check if the table descriptions already exist...if they don't scrape them into df
+if (file.exists(file.path("../data/abcd_data_dict_2.html"))){
+  cat("ABCD table descriptions already scraped")
+  setwd(script_dir)
+  
+} else {
+  abcd_data_dict_2_url <- "https://nda.nih.gov/data_dictionary.html?source=ABCD%2BRelease%2B2.0&submission=ALL"
+  download.file(abcd_data_dict_2_url, destfile = '../data/abcd_data_dict_2.html') # uncomment to scrape
+}
+
 abcd_dict_2 <- read_html("../data/abcd_data_dict_2.html")
 tab_shortnames <- abcd_dict_2 %>% html_nodes("td.short-name-column") %>% html_text() 
 tab_links <- abcd_dict_2 %>% html_elements("td.short-name-column") %>% html_elements("a") %>% html_attr("href")
@@ -300,9 +294,7 @@ download_all <- function(df_row) {
   
 }
 
-
 # download all tables html pages in ABCD 2.0 release and dump in folder if it doesn't exist already
-
 # setting up the sub directory
 sub_dir <- "data/abcd_tables_html"
 if (file.exists(file.path("..", sub_dir))){
@@ -372,7 +364,6 @@ if (file.exists(file.path("..", sub_dir))){
   setwd(script_dir)
 }
 
-
 # add the COLUMN descriptions to the vis table for better clarity about what the columns mean
 # change col names of abcd_dict to allow merging, map column or ABCD descriptions to their columns
 
@@ -380,7 +371,8 @@ if (file.exists(file.path("..", sub_dir))){
 # JOIN BY ELEMENT DESCRIPTION AND TABLE NAME (when this is done, the KG blows up bc there is a column (interview_age) of same name in multiple tables)
 # for clarity, see code between star dashes below
 # ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
-colnames(vis)[colnames(vis) == "Var1"] ="ElementName"
+vis_meta <- vis
+colnames(vis)[colnames(vis_meta) == "Var1"] ="ElementName"
 
 test <- vis %>% left_join(abcd_dict[, c("table_name", "ElementName", "ElementDescription")], by="ElementName")
 # rename cols
@@ -394,7 +386,7 @@ test1 <- aggregate(Var1_tablename ~., test, toString)
 
 # the data dictionary has multiple rows/tables for interview_age, interview_date, and subject_key which blows up size of KG/vis when I try and left_join
 # make the data dictionary have only 1 table and 1 description
-abcd_dict <- abcd_dict[!grepl("interview_age", abcd_dict$ElementName), ]
+abcd_dict <- abcd_dict[!grepl("interview_age|interview_date|subjectkey|src_subject_id|sex", abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ElementName = "interview_age",
                                    DataType = "Integer",
@@ -409,7 +401,6 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
 # check that that all rows are deleted and the correct row has been added in place 
 # abcd_dict[abcd_dict$ElementName == 'interview_age',]
 
-abcd_dict <- abcd_dict[!grepl("interview_date",abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ElementName = "interview_date",
                                    DataType = "Date",
@@ -423,7 +414,6 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
 # check that that all rows are deleted and the correct row has been added in place 
 # abcd_dict[abcd_dict$ElementName == 'interview_date',]
 
-abcd_dict <- abcd_dict[!grepl("subjectkey",abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ElementName = "subjectkey",
                                    DataType = "GUID",
@@ -437,7 +427,6 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
 # check that that all rows are deleted and the correct row has been added in place 
 # abcd_dict[abcd_dict$ElementName == 'subjectkey',]
 
-abcd_dict <- abcd_dict[!grepl("src_subject_id",abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ElementName = "src_subject_id",
                                    DataType = "String",
@@ -451,7 +440,6 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
 # check that that all rows are deleted and the correct row has been added in place 
 # abcd_dict[abcd_dict$ElementName == 'src_subject_id',]
 
-abcd_dict <- abcd_dict[!grepl("sex",abcd_dict$ElementName), ]
 abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    ElementName = "sex",
                                    DataType = "String",
@@ -464,7 +452,6 @@ abcd_dict <- abcd_dict %>% add_row(table_name = NA,
                                    Aliases = "gender")
 # check that that all rows are deleted and the correct row has been added in place 
 # abcd_dict[abcd_dict$ElementName == 'sex',]
-
 
 # NOW add the column descriptions 
 # do for Var1
@@ -491,7 +478,6 @@ vis_meta <- vis_meta %>% rename("Var2_tablename" = "table_name",
 # some column and table descriptions did not get added because the column name is actually in the Aliases column
 # join on Aliases to grab those tables and descriptions
 # add the column descriptions and table names again, this time by trying to find the names in Aliases
-
 
 # conduct mapping for "Var1" column using ALIASES now  
 # JOIN BY ELEMENT DESCRIPTION AND TABLE NAME (when this is done, the KG blows up bc there is a column (interview_age) of same name in multiple tables)
@@ -564,17 +550,22 @@ incorrect_Alias_check <- abcd_dict[grepl("reshist_addr3_pm25_2016_annual_avg", a
 # the data dictionary has incorrectly listed "reshist_addr2_pm25_2016_annual_avg" and "reshist_addr3_pm25_2016_annual_avg" as Aliases in the "abcd_tbss01" table
 # remove them from data dictionary and re-run analysis
 abcd_dict <-  abcd_dict %>% filter(!(table_name == "abcd_tbss01" & grepl("reshist_addr2_pm25_2016_annual_avg|reshist_addr3_pm25_2016_annual_avg", Aliases))) 
+
+abcd_dict_mod <- abcd_dict # save the dict, now altered, as abcd_dict_mod (for MODified)
 # ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
 
 # ------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!------- @@@ ------- !!!!!
 
+# remove some objects from memory
+rm(list=setdiff(ls(), c("table_details", "script_dir", "sub_dir", "abcd_dict_mod", "abcd_dict", "num_kg", "abcd_sub", "corr_info", "vis", "vis_meta")))
 
-# -------------------   RE-RUN GENERATION OF JOINING METADATA TO VIS DF USING NEW ABCD_DICT  ------------------- #
+# -------------------   RE-RUN GENERATION OF JOINING METADATA TO VIS DF USING NEW abcd_dict_mod  ------------------- #
 
+abcd_dict_mod <- abcd_dict # save the dict, now altered, as abcd_dict_mod (for MODified)
 # NOW add the column descriptions 
 vis_meta <- vis
 colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="ElementName"
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
+vis_meta <- vis_meta %>% left_join(abcd_dict_mod[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
 # rename cols so they correspond to the right variable
 vis_meta <- vis_meta %>% rename("Var1_tablename" = "table_name",
                                 "Var1_description" = "ElementDescription",
@@ -583,7 +574,7 @@ vis_meta <- vis_meta %>% rename("Var1_tablename" = "table_name",
                                 "Var1_DataType" = "DataType")
 # repeat for Var2
 colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="ElementName"
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
+vis_meta <- vis_meta %>% left_join(abcd_dict_mod[, c("ElementName", "table_name", "ElementDescription", "Notes", "DataType")], by="ElementName")
 # rename cols so they correspond to the right variable
 vis_meta <- vis_meta %>% rename("Var2_tablename" = "table_name",
                                 "Var2_description" = "ElementDescription",
@@ -596,28 +587,39 @@ vis_meta <- vis_meta %>% rename("Var2_tablename" = "table_name",
 # join on Aliases to grab those tables and descriptions
 # add the column descriptions and table names again, this time by trying to find the names in Aliases
 
-colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="Aliases"
+# the Alias col has multiple Alias names for one ElementName (separated by comma)
+# will join on Aliases, so need to separate out these different Aliases
+abcd_dict_mod <- abcd_dict # save the dict, now altered, as abcd_dict_mod (for MODified)
 
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes", "DataType")], by="Aliases")
-# rename cols
-vis_meta <- vis_meta %>% 
+aliases_split <- data.frame(str_split(abcd_dict_mod$Aliases, ",", simplify=TRUE))
+abcd_dict_mod <- cbind(abcd_dict_mod, aliases_split)
+
+abcd_dict_mod_long <- abcd_dict_mod %>% pivot_longer(cols=c('X1','X2','X3','X4'), values_to = "var_name")
+
+
+colnames(vis_meta)[colnames(vis_meta) == "Var1"] ="var_name"
+vis_meta <- left_join(vis_meta, abcd_dict_mod_long[, c("Aliases", "table_name", "ElementDescription", "Notes", "DataType", "var_name")], by=c("var_name"))
+vis_meta <- vis_meta %>%
   rename("Var1_Alias_tablename" = "table_name",
          "Var1_Alias_description" = "ElementDescription",
          "Var1_Alias_notes" = "Notes",
-         "Var1" = "Aliases",
-         "Var1_Alias_DataType" = "DataType")
+         "Var1_Aliases" = "Aliases",
+         "Var1_Alias_DataType" = "DataType",
+         "Var1" = "var_name")
+
 
 # repeat the same for Var2
-colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="Aliases"
+colnames(vis_meta)[colnames(vis_meta) == "Var2"] ="var_name"
 
-vis_meta <- vis_meta %>% left_join(abcd_dict[, c("Aliases", "table_name", "ElementDescription", "Notes", "DataType")], by="Aliases")
+vis_meta <- left_join(vis_meta, abcd_dict_mod_long[, c("Aliases", "table_name", "ElementDescription", "Notes", "DataType", "var_name")], by=c("var_name"))
 # rename cols
-vis_meta <- vis_meta %>% 
+vis_meta <- vis_meta %>%
   rename("Var2_Alias_tablename" = "table_name",
          "Var2_Alias_description" = "ElementDescription",
          "Var2_Alias_notes" = "Notes",
-         "Var2" = "Aliases",
-         "Var2_Alias_DataType" = "DataType")
+         "Var2_Aliases" = "Aliases",
+         "Var2_Alias_DataType" = "DataType",
+         "Var2" = "var_name")
 
 # now attach table descriptions to the tablenames...there are 4 "table_names" columns
 # they are: Var1_tablename, Var1_Alias_tablename, Var2_tablename, and Var2_Alias_tablename
@@ -656,52 +658,55 @@ vis_meta <- vis_meta %>%
          "Var2_Alias_table_description" = "table_description")
 
 # make the final dataframe simpler by combining information in Alias and ABCD dictionary columns
-# if the ABCD_dictionary column is empty or NA for any tablename or column description or table description, fill it in with the corresponding Alias information, drop the Alias columns and just make 1 generic column holding info
+# if the abcd_dict_modionary column is empty or NA for any tablename or column description or table description, fill it in with the corresponding Alias information, drop the Alias columns and just make 1 generic column holding info
 
 # DOING VAR1
-vis_meta$Var1_tablename <- ifelse(vis_meta$Var1_tablename == '' | is.na(vis_meta$Var1_tablename),
-                                  vis_meta$Var1_Alias_tablename, vis_meta$Var1_tablename)
-vis_meta <- subset(vis_meta, select = -Var1_Alias_tablename)
+vis_meta_final <- vis_meta 
+vis_meta_final$Var1_tablename <- ifelse(vis_meta_final$Var1_tablename == '' | is.na(vis_meta_final$Var1_tablename),
+                                        vis_meta_final$Var1_Alias_tablename, vis_meta_final$Var1_tablename)
+vis_meta_final <- subset(vis_meta_final, select = -Var1_Alias_tablename)
 
-vis_meta$Var1_description <- ifelse(vis_meta$Var1_description == '' | is.na(vis_meta$Var1_description),
-                                    vis_meta$Var1_Alias_description, vis_meta$Var1_description)
-vis_meta <- subset(vis_meta, select = -Var1_Alias_description)
+vis_meta_final$Var1_description <- ifelse(vis_meta_final$Var1_description == '' | is.na(vis_meta_final$Var1_description),
+                                          vis_meta_final$Var1_Alias_description, vis_meta_final$Var1_description)
+vis_meta_final <- subset(vis_meta_final, select = -Var1_Alias_description)
 
-vis_meta$Var1_notes <- ifelse(vis_meta$Var1_notes == '' | is.na(vis_meta$Var1_notes),
-                              vis_meta$Var1_Alias_notes, vis_meta$Var1_notes)
-vis_meta <- subset(vis_meta, select = -Var1_Alias_notes)
+vis_meta_final$Var1_notes <- ifelse(vis_meta_final$Var1_notes == '' | is.na(vis_meta_final$Var1_notes),
+                                    vis_meta_final$Var1_Alias_notes, vis_meta_final$Var1_notes)
+vis_meta_final <- subset(vis_meta_final, select = -Var1_Alias_notes)
 
-vis_meta$Var1_table_description <- ifelse(vis_meta$Var1_table_description == '' | is.na(vis_meta$Var1_table_description),
-                                          vis_meta$Var1_Alias_table_description, vis_meta$Var1_table_description)
-vis_meta <- subset(vis_meta, select = -Var1_Alias_table_description)
+vis_meta_final$Var1_table_description <- ifelse(vis_meta_final$Var1_table_description == '' | is.na(vis_meta_final$Var1_table_description),
+                                                vis_meta_final$Var1_Alias_table_description, vis_meta_final$Var1_table_description)
+vis_meta_final <- subset(vis_meta_final, select = -Var1_Alias_table_description)
 
-vis_meta$Var1_DataType <- ifelse(vis_meta$Var1_DataType == '' | is.na(vis_meta$Var1_DataType),
-                                 vis_meta$Var1_Alias_DataType, vis_meta$Var1_DataType)
-vis_meta <- subset(vis_meta, select = -Var1_Alias_DataType)
+vis_meta_final$Var1_DataType <- ifelse(vis_meta_final$Var1_DataType == '' | is.na(vis_meta_final$Var1_DataType),
+                                       vis_meta_final$Var1_Alias_DataType, vis_meta_final$Var1_DataType)
+vis_meta_final <- subset(vis_meta_final, select = -Var1_Alias_DataType)
 
 # REPEAT FOR VAR2
-vis_meta$Var2_tablename <- ifelse(vis_meta$Var2_tablename == '' | is.na(vis_meta$Var2_tablename),
-                                  vis_meta$Var2_Alias_tablename, vis_meta$Var2_tablename)
-vis_meta <- subset(vis_meta, select = -Var2_Alias_tablename)
+vis_meta_final$Var2_tablename <- ifelse(vis_meta_final$Var2_tablename == '' | is.na(vis_meta_final$Var2_tablename),
+                                        vis_meta_final$Var2_Alias_tablename, vis_meta_final$Var2_tablename)
+vis_meta_final <- subset(vis_meta_final, select = -Var2_Alias_tablename)
 
-vis_meta$Var2_description <- ifelse(vis_meta$Var2_description == '' | is.na(vis_meta$Var2_description),
-                                    vis_meta$Var2_Alias_description, vis_meta$Var2_description)
-vis_meta <- subset(vis_meta, select = -Var2_Alias_description)
+vis_meta_final$Var2_description <- ifelse(vis_meta_final$Var2_description == '' | is.na(vis_meta_final$Var2_description),
+                                          vis_meta_final$Var2_Alias_description, vis_meta_final$Var2_description)
+vis_meta_final <- subset(vis_meta_final, select = -Var2_Alias_description)
 
-vis_meta$Var2_notes <- ifelse(vis_meta$Var2_notes == '' | is.na(vis_meta$Var2_notes),
-                              vis_meta$Var2_Alias_notes, vis_meta$Var2_notes)
-vis_meta <- subset(vis_meta, select = -Var2_Alias_notes)
+vis_meta_final$Var2_notes <- ifelse(vis_meta_final$Var2_notes == '' | is.na(vis_meta_final$Var2_notes),
+                                    vis_meta_final$Var2_Alias_notes, vis_meta_final$Var2_notes)
+vis_meta_final <- subset(vis_meta_final, select = -Var2_Alias_notes)
 
-vis_meta$Var2_table_description <- ifelse(vis_meta$Var2_table_description == '' | is.na(vis_meta$Var2_table_description),
-                                          vis_meta$Var2_Alias_table_description, vis_meta$Var2_table_description)
-vis_meta <- subset(vis_meta, select = -Var2_Alias_table_description)
+vis_meta_final$Var2_table_description <- ifelse(vis_meta_final$Var2_table_description == '' | is.na(vis_meta_final$Var2_table_description),
+                                                vis_meta_final$Var2_Alias_table_description, vis_meta_final$Var2_table_description)
+vis_meta_final <- subset(vis_meta_final, select = -Var2_Alias_table_description)
 
-vis_meta$Var2_DataType <- ifelse(vis_meta$Var2_DataType == '' | is.na(vis_meta$Var2_DataType),
-                                 vis_meta$Var2_Alias_DataType, vis_meta$Var2_DataType)
-vis_meta <- subset(vis_meta, select = -Var2_Alias_DataType)
+vis_meta_final$Var2_DataType <- ifelse(vis_meta_final$Var2_DataType == '' | is.na(vis_meta_final$Var2_DataType),
+                                       vis_meta_final$Var2_Alias_DataType, vis_meta_final$Var2_DataType)
+vis_meta_final <- subset(vis_meta_final, select = -Var2_Alias_DataType)
+
+
 
 # trim whitespace
-vis_meta <- vis_meta %>% mutate(across(where(is.character), str_trim))
+vis_meta_final <- vis_meta_final %>% mutate(across(where(is.character), str_trim))
 # remove newlines and tabs from dataframe 
 remove_newlines <- function(col) {
   col <- gsub("[\r\n]", "", col)
@@ -710,13 +715,14 @@ remove_newlines <- function(col) {
   return(col)
 }
 
+# testing to see if my gsub function removes whitespaces
 # test_string <- c("How many drinks (mg) did you have?
 # 
 #  RA: Please use the following link to determine total miligrams per serving size and open the link in new window:")
 # 
 # gsub("[\r\n]", "", test_string)
 
-vis_meta <- data.frame(lapply(vis_meta, function(x) sapply(x, remove_newlines)))
+vis_meta_final <- data.frame(lapply(vis_meta_final, function(x) sapply(x, remove_newlines)))
 
 # write correlations with metadata (table descriptions and column descriptions to output file)
 sub_dir <- "outputs"
@@ -724,7 +730,7 @@ setwd(script_dir)
 if (file.exists(file.path("..", sub_dir))){
   # specifying the working directory
   setwd(file.path("..", sub_dir))
-  write.table(vis_meta, 'correlations_with_metadata.txt',
+  write.table(vis_meta_final, 'correlations_with_metadata.txt',
               append = FALSE,
               quote=FALSE,
               sep = "\t",
@@ -737,7 +743,7 @@ if (file.exists(file.path("..", sub_dir))){
   dir.create(file.path("..", sub_dir))
   # specifying the working directory
   setwd(file.path("..", sub_dir))
-  write.table(vis_meta, 'correlations_with_metadata.txt',
+  write.table(vis_meta_final, 'correlations_with_metadata.txt',
               append = FALSE,
               quote=FALSE,
               sep = "\t",
@@ -746,29 +752,30 @@ if (file.exists(file.path("..", sub_dir))){
   setwd(script_dir)
 }
 
-# make vis_meta dataframe into edges dataframe
+# make vis_meta_final dataframe into edges dataframe
 # subject, predicate, object, subject_name, object_name, category, attributes
-edges <- vis_meta[ , which(names(vis_meta) %in% c("Var1","Var2", "corr", "n", "p_val", "adj_p", "neg_log_p_val"))]
+edges <- vis_meta_final[ , which(names(vis_meta_final) %in% c("Var1","Var2", "corr", "n", "p_val", "adj_p", "neg_log_p_val"))]
 edges <- edges %>% rename("subject" = "Var1", "object" = "Var2")
 edges$predicate <- "biolink:correlated_with"
 edges$category <- "biolink:SocioeconomicExposure"
 # re-order columns so that most important/required ones are first
 col_order <- c("subject", "predicate", "object", "corr", "p_val", "adj_p", "neg_log_p_val", "n")
 edges <- edges[, col_order]
-
 # make nodes dataframe
-nodes1 <- vis_meta[ , grepl( "Var1" , names(vis_meta))] %>% rename("name" = "Var1",
-                                                                   "tablename" = "Var1_tablename",
-                                                                   "description" = "Var1_description",
-                                                                   "notes" = "Var1_notes",
-                                                                   "table_description" = "Var1_table_description",
-                                                                   "datatype" = "Var1_DataType")
-nodes2 <- vis_meta[ , grepl( "Var2" , names(vis_meta))] %>% rename("name" = "Var2",
-                                                                   "tablename" = "Var2_tablename",
-                                                                   "description" = "Var2_description",
-                                                                   "notes" = "Var2_notes",
-                                                                   "table_description" = "Var2_table_description",
-                                                                   "datatype" = "Var2_DataType")
+nodes1 <- vis_meta_final[ , grepl( "Var1" , names(vis_meta_final))] %>% rename("name" = "Var1",
+                                                                               "tablename" = "Var1_tablename",
+                                                                               "description" = "Var1_description",
+                                                                               "notes" = "Var1_notes",
+                                                                               "table_description" = "Var1_table_description",
+                                                                               "datatype" = "Var1_DataType",
+                                                                               "aliases" = "Var1_Aliases")
+nodes2 <- vis_meta_final[ , grepl( "Var2" , names(vis_meta_final))] %>% rename("name" = "Var2",
+                                                                               "tablename" = "Var2_tablename",
+                                                                               "description" = "Var2_description",
+                                                                               "notes" = "Var2_notes",
+                                                                               "table_description" = "Var2_table_description",
+                                                                               "datatype" = "Var2_DataType",
+                                                                               "aliases" = "Var2_Aliases")
 nodes <- rbind(nodes1, nodes2)
 nodes <- nodes %>% distinct(name, tablename, description, notes, table_description) 
 rm(nodes1, nodes2)
@@ -850,5 +857,70 @@ if (file.exists(file.path("..", sub_dir))){
             row.names=FALSE)
   setwd(script_dir)
 }
+
+# attempt using UMLS Metamap API to map terms
+## UMLS API call docs: https://documentation.uts.nlm.nih.gov/rest/search/
+sub_dir <- "outputs"
+setwd(script_dir)
+if (file.exists(file.path("..", sub_dir, "UMLS_mappings.txt"))){
+  print("UMLS mappings already conducted, should be in file UMLS_mappings.txt")
+  setwd(script_dir)
+} else {
+  mapped_to_umls <- data.frame()
+  # get the UMLS CURIES
+  print("Conducting UMLS mappings for terms in ABCD correlations")
+  ## what the API call should look like: https://uts-ws.nlm.nih.gov/rest/search/current?apiKey=54041f07-fc66-4558-b038-b46ca8bdcc6b&string=renal%20tubular%20acidosis&pageSize=3
+  ## UMLS API call docs: https://documentation.uts.nlm.nih.gov/rest/search/
+  api_key <- 
+    pageSize <- 5
+  pageNumber <- 1
+  partialSearch <- TRUE
+  mapped_to_umls <- data.frame()
+  # search_term <- "renal tubular acidosis"
+  # nodes$mapping_input <- data.frame(mapping_input=sapply(apply(nodes[, c("name", "table_description")], 1, \(x) x[!is.na(x)]), paste, collapse=','))[["mapping_input"]]
+  nodes$uris <- sapply(nodes$name, function(x) URLencode((str_glue("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey={api_key}&string={search_term}&partialSearch={partial_search}&pageNumber={page_number}&pageSize={page_size}"))))
+  # r <- GET("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey=54041f07-fc66-4558-b038-b46ca8bdcc6b&string=In%20the%20past%206%20months,%20about%20how%20many%20times%20per%20day%20did%20you%20use%20tobacco%20(including%20smokeless%20tobacco)?%20En%20los%20%C3%BAltimos%206%20meses,%20aproximadamente%20%C2%BFcu%C3%A1ntas%20veces%20por%20d%C3%ADa%20consumi%C3%B3%20tabaco%20(incluyendo%20tabaco%20sin%20humo)?&pageSize=5&pageNumber=1")
+  pool <- new_pool()
+  # results only available through call back function
+  cb <- function(req){
+    # cat("done:", req$url, ": HTTP:", req$status, "\n", "content:", rawToChar(req$content) %>% append(mapped_to_umls, .), "\n")
+    requests <- list(req$url, req$status, rawToChar(req$content))
+    mapped_to_umls <<- rbind(mapped_to_umls, requests)
+  }
+  sapply(nodes$uris, curl_fetch_multi, done=cb, pool=pool)
+  out <- multi_run(pool = pool)
+  colnames(mapped_to_umls) <- c("url", "response_status", "content")
+  write.table(mapped_to_umls, file.path("..", sub_dir, "UMLS_mappings.txt"), row.names=FALSE, quote=FALSE)
+  setwd(script_dir)
+}
+
+#####  ---------      -------------     ----------------    #####
+#####  ---------      -------------     ----------------    #####
+#####  ---------      -------------     ----------------    #####
+
+## what the API call should look like: https://uts-ws.nlm.nih.gov/rest/search/current?apiKey=54041f07-fc66-4558-b038-b46ca8bdcc6b&string=renal%20tubular%20acidosis&pageSize=3
+## UMLS API call docs: https://documentation.uts.nlm.nih.gov/rest/search/
+
+api_key <- 
+  pageSize <- 5
+pageNumber <- 1
+partialSearch <- TRUE
+search_term = "Residential history derived- Area Deprivation Index: national percentiles, higher means higher value of ADI 3"
+
+r <- GET(URLencode(str_glue("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey={api_key}&string={search_term}&partialSearch={partial_search}&pageNumber={page_number}&pageSize={page_size}")))
+rawToChar(r$content)
+r <- GET("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey=54041f07-fc66-4558-b038-b46ca8bdcc6b&string=In%20the%20past%206%20months,%20about%20how%20many%20times%20per%20day%20did%20you%20use%20tobacco%20(including%20smokeless%20tobacco)?%20En%20los%20%C3%BAltimos%206%20meses,%20aproximadamente%20%C2%BFcu%C3%A1ntas%20veces%20por%20d%C3%ADa%20consumi%C3%B3%20tabaco%20(incluyendo%20tabaco%20sin%20humo)?&pageSize=5&pageNumber=1")
+prettify(rawToChar(r$content), indent=4)
+
+jsonstring <- 
+  test <- fromJSON(rawToChar(r$content))
+View(test$result$results)
+#####  ---------      -------------     ----------------    #####
+#####  ---------      -------------     ----------------    #####
+#####  ---------      -------------     ----------------    #####
+
+
+
+#####  ---------      -------------     ----------------    #####
 
 
