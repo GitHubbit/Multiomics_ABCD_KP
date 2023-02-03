@@ -15,7 +15,7 @@ librarian::shelf("data.table", "R.utils", "tidyverse",
                  "corrplot", "Hmisc", "ggplot2",
                  "RColorBrewer", "rvest", "utils",
                  "futile.logger", "renv", "httr",
-                 "jsonlite", "curl", "magrittr",
+                 "jsonlite", "crul", "magrittr",
                  "stringi")
 
 # read in the RDS file
@@ -862,35 +862,15 @@ if (file.exists(file.path("..", sub_dir))){
 ## UMLS API call docs: https://documentation.uts.nlm.nih.gov/rest/search/
 sub_dir <- "outputs"
 setwd(script_dir)
-if (file.exists(file.path("..", sub_dir, "UMLS_mappings.txt"))){
-  print("UMLS mappings already conducted, should be in file UMLS_mappings.txt")
+if (file.exists(file.path("..", sub_dir, "MetaMapped_ABCD_VarNames.txt"))){
+  print("UMLS mappings already conducted, should be in file MetaMapped_ABCD_VarNames.txt")
   setwd(script_dir)
 } else {
-  mapped_to_umls <- data.frame()
+  sub_dir = "skr_web_python_api"
   # get the UMLS CURIES
+  write.table(nodes$name, file.path("../outputs/", "ABCD_varnames_input_to_MetaMap.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
   print("Conducting UMLS mappings for terms in ABCD correlations")
-  ## what the API call should look like: https://uts-ws.nlm.nih.gov/rest/search/current?apiKey=54041f07-fc66-4558-b038-b46ca8bdcc6b&string=renal%20tubular%20acidosis&pageSize=3
-  ## UMLS API call docs: https://documentation.uts.nlm.nih.gov/rest/search/
-  api_key <- 
-    pageSize <- 5
-  pageNumber <- 1
-  partialSearch <- TRUE
-  mapped_to_umls <- data.frame()
-  # search_term <- "renal tubular acidosis"
-  # nodes$mapping_input <- data.frame(mapping_input=sapply(apply(nodes[, c("name", "table_description")], 1, \(x) x[!is.na(x)]), paste, collapse=','))[["mapping_input"]]
-  nodes$uris <- sapply(nodes$name, function(x) URLencode((str_glue("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey={api_key}&string={search_term}&partialSearch={partial_search}&pageNumber={page_number}&pageSize={page_size}"))))
-  # r <- GET("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey=54041f07-fc66-4558-b038-b46ca8bdcc6b&string=In%20the%20past%206%20months,%20about%20how%20many%20times%20per%20day%20did%20you%20use%20tobacco%20(including%20smokeless%20tobacco)?%20En%20los%20%C3%BAltimos%206%20meses,%20aproximadamente%20%C2%BFcu%C3%A1ntas%20veces%20por%20d%C3%ADa%20consumi%C3%B3%20tabaco%20(incluyendo%20tabaco%20sin%20humo)?&pageSize=5&pageNumber=1")
-  pool <- new_pool()
-  # results only available through call back function
-  cb <- function(req){
-    # cat("done:", req$url, ": HTTP:", req$status, "\n", "content:", rawToChar(req$content) %>% append(mapped_to_umls, .), "\n")
-    requests <- list(req$url, req$status, rawToChar(req$content))
-    mapped_to_umls <<- rbind(mapped_to_umls, requests)
-  }
-  sapply(nodes$uris, curl_fetch_multi, done=cb, pool=pool)
-  out <- multi_run(pool = pool)
-  colnames(mapped_to_umls) <- c("url", "response_status", "content")
-  write.table(mapped_to_umls, file.path("..", sub_dir, "UMLS_mappings.txt"), row.names=FALSE, quote=FALSE)
+  # system("python ../skr_web_python_api/examples/generic_batch_file.py -e knarsinh@systemsbiology.org -a 54041f07-fc66-4558-b038-b46ca8bdcc6b ../outputs/ABCD_varnames_input_to_MetaMap.txt", wait=TRUE)
   setwd(script_dir)
 }
 
@@ -898,29 +878,113 @@ if (file.exists(file.path("..", sub_dir, "UMLS_mappings.txt"))){
 #####  ---------      -------------     ----------------    #####
 #####  ---------      -------------     ----------------    #####
 
-## what the API call should look like: https://uts-ws.nlm.nih.gov/rest/search/current?apiKey=54041f07-fc66-4558-b038-b46ca8bdcc6b&string=renal%20tubular%20acidosis&pageSize=3
-## UMLS API call docs: https://documentation.uts.nlm.nih.gov/rest/search/
-
-api_key <- 
-  pageSize <- 5
-pageNumber <- 1
-partialSearch <- TRUE
-search_term = "Residential history derived- Area Deprivation Index: national percentiles, higher means higher value of ADI 3"
-
-r <- GET(URLencode(str_glue("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey={api_key}&string={search_term}&partialSearch={partial_search}&pageNumber={page_number}&pageSize={page_size}")))
-rawToChar(r$content)
-r <- GET("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey=54041f07-fc66-4558-b038-b46ca8bdcc6b&string=In%20the%20past%206%20months,%20about%20how%20many%20times%20per%20day%20did%20you%20use%20tobacco%20(including%20smokeless%20tobacco)?%20En%20los%20%C3%BAltimos%206%20meses,%20aproximadamente%20%C2%BFcu%C3%A1ntas%20veces%20por%20d%C3%ADa%20consumi%C3%B3%20tabaco%20(incluyendo%20tabaco%20sin%20humo)?&pageSize=5&pageNumber=1")
-prettify(rawToChar(r$content), indent=4)
-
-jsonstring <- 
-  test <- fromJSON(rawToChar(r$content))
-View(test$result$results)
-#####  ---------      -------------     ----------------    #####
-#####  ---------      -------------     ----------------    #####
-#####  ---------      -------------     ----------------    #####
 
 
 
-#####  ---------      -------------     ----------------    #####
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+nodes$uris <- sapply(nodes$name, function(x) URLencode((str_glue("https://uts-ws.nlm.nih.gov/rest/search/current?apiKey={api_key}&string={search_term}&partialSearch={partial_search}&pageNumber={page_number}&pageSize={page_size}"))))
+# test_uris <- sapply(nodes$name, function(x), URLencode(str_glue(METAMAP_INTERACTIVE_URL, )))
+
+
+
+METAMAP_INTERACTIVE_URL = paste0("https://ii.nlm.nih.gov/cgi-bin/II/UTS_Required", "/API_MM_interactive.pl")
+nodes$api_endpoint <- "https://ii.nlm.nih.gov/cgi-bin/II/UTS_Required/API_MM_interactive.pl"
+
+req1 <- HttpRequest$new(
+  url = "https://httpbin.org/post", 
+  headers = list(`Content-Type` = "application/json")
+)$post(body = jsonlite::toJSON(iris[1,]))
+req2 <- HttpRequest$new(
+  url = "https://httpbin.org/post", 
+  headers = list(`Content-Type` = "application/json")
+)$post(body = jsonlite::toJSON(iris[2,]))
+
+
+
+
+
+get_service_tickets <- function(x) {
+  tgt <-
+    POST(
+      url = "https://utslogin.nlm.nih.gov/cas/v1/api-key", encode = "form",
+      body = list("apikey" = "54041f07-fc66-4558-b038-b46ca8bdcc6b")
+    )
+  
+  tgt.page <- read_html(rawToChar(tgt$content))
+  tgt <- html_attr(html_nodes(x = tgt.page, xpath = "//form"), "action")
+  st.req <-
+    POST(
+      url = tgt, encode = "form",
+      body = list("service" = "http://umlsks.nlm.nih.gov",
+                  "ksource" = '2020AB')
+    )
+  service_ticket <- rawToChar(st.req$content)  # THIS IS THE SERVICE TICKET
+  return(service_ticket)
+}
+
+nodes$tickets <- by(nodes, 1:nrow(nodes), get_service_tickets)
+
+
+
+
+
+
+
+
+
+
+
+
+
+nodes$tickets <- apply(nodes, 1, get_service_tickets())
+
+nodes$tickets <- sapply(nodes$name, get_service_tickets())
+
+  sapply(nodes$name, function(x), URLencode(str_glue(METAMAP_INTERACTIVE_URL, )))
+
+
+ksource <- '2020AB'
+
+
+metamap_handle <- new_handle() %>%
+  handle_setheaders(
+    "Accept" = "application/json",
+    "ticket" = service_ticket) %>%
+  handle_setform(
+    "APIText" = "renal failure",
+    "KSOURCE" = ksource)
+
+cb <- function(req){cat("done:", req$url, ": HTTP:", req$status, "\n")}
+curl_fetch_multi(METAMAP_INTERACTIVE_URL, handle = metamap_handle, done = function(res){
+  cat("Request complete! Response content:\n")
+  cat(rawToChar(res$content))
+})
+
+# Perform the request
+out <- multi_run()
+View(out)
+
+r <- GET(METAMAP_INTERACTIVE_URL)
+headers(r)
+str(content(r))
+r$status_code
+stringi::stri_enc_detect(content(r, "text"))
+content(r, "text", encoding="ISO-8859-1")
+str(content(r, "parsed"))
+
+        
